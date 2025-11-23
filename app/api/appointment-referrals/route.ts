@@ -1,0 +1,163 @@
+//@ts-nocheck
+import { type NextRequest, NextResponse } from "next/server"
+import { AppointmentReferral, connectDB, Appointment, User } from "@/lib/db-server"
+import { verifyToken } from "@/lib/auth"
+
+export async function GET(request: NextRequest) {
+  try {
+    await connectDB()
+    const token = request.headers.get("authorization")?.split(" ")[1]
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const payload = verifyToken(token)
+    if (!payload || payload.role !== "doctor") {
+      return NextResponse.json({ error: "Only doctors can view referral requests" }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const filterType = searchParams.get("type") || "all" // "received", "sent", or "all"
+
+    const query: any = {}
+
+    if (filterType === "received") {
+      query.toDoctorId = payload.userId
+    } else if (filterType === "sent") {
+      query.fromDoctorId = payload.userId
+    } else if (filterType === "all") {
+      query.$or = [{ toDoctorId: payload.userId }, { fromDoctorId: payload.userId }]
+    }
+
+    const referrals = await AppointmentReferral.find(query).sort({ createdAt: -1 })
+
+    return NextResponse.json({ success: true, referrals })
+  } catch (error) {
+    console.error("GET appointment referrals error:", error)
+    return NextResponse.json({ error: "Failed to fetch referrals" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    await connectDB()
+    const token = request.headers.get("authorization")?.split(" ")[1]
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const payload = verifyToken(token)
+    if (!payload || payload.role !== "doctor") {
+      return NextResponse.json({ error: "Only doctors can create referrals" }, { status: 403 })
+    }
+
+    const { appointmentId, toDoctorId, referralReason } = await request.json()
+
+    console.log("[v0] Referral request received:", {
+      appointmentId,
+      toDoctorId,
+      referralReason,
+      fromDoctor: payload.userId,
+    })
+
+    if (!appointmentId) {
+      return NextResponse.json({ error: "Appointment ID is required" }, { status: 400 })
+    }
+
+    if (!toDoctorId) {
+      return NextResponse.json({ error: "Target doctor is required" }, { status: 400 })
+    }
+
+    if (!referralReason || !String(referralReason).trim()) {
+      return NextResponse.json({ error: "Referral reason is required" }, { status: 400 })
+    }
+
+    const appointment = await Appointment.findById(appointmentId)
+    console.log("[v0] Appointment lookup result:", {
+      appointmentId,
+      found: !!appointment,
+      patientId: appointment?.patientId,
+      patientName: appointment?.patientName,
+      doctorId: appointment?.doctorId,
+    })
+
+    if (!appointment) {
+      return NextResponse.json({ error: "Appointment not found" }, { status: 404 })
+    }
+
+    if (!appointment.patientId || String(appointment.patientId).trim() === "") {
+      console.error("[v0] Appointment missing or invalid patientId:", {
+        appointmentId,
+        patientId: appointment.patientId,
+        patientIdType: typeof appointment.patientId,
+        appointmentData: {
+          _id: appointment._id,
+          patientName: appointment.patientName,
+          doctorId: appointment.doctorId,
+          date: appointment.date,
+        },
+      })
+      return NextResponse.json(
+        {
+          error: "Patient ID is required",
+          details: "The appointment does not have a valid patient associated with it. Please contact support.",
+        },
+        { status: 400 },
+      )
+    }
+
+    // Verify the requesting doctor owns this appointment
+    if (String(appointment.doctorId) !== String(payload.userId)) {
+      return NextResponse.json({ error: "You can only refer your own appointments" }, { status: 403 })
+    }
+
+    if (appointment.isReferred) {
+      return NextResponse.json({ error: "This appointment is already referred to another doctor" }, { status: 400 })
+    }
+
+    // Get target doctor info
+    const targetDoctor = await User.findById(toDoctorId)
+    if (!targetDoctor) {
+      return NextResponse.json({ error: "Target doctor not found" }, { status: 404 })
+    }
+
+    // Create referral record
+    const referral = await AppointmentReferral.create({
+      appointmentId,
+      patientId: String(appointment.patientId),
+      patientName: appointment.patientName,
+      fromDoctorId: payload.userId,
+      fromDoctorName: payload.name || "Unknown",
+      toDoctorId: String(toDoctorId),
+      toDoctorName: targetDoctor.name,
+      referralReason: String(referralReason).trim(),
+      status: "pending",
+      notes: "",
+    })
+
+    await Appointment.findByIdAndUpdate(appointmentId, {
+      originalDoctorId: appointment.doctorId,
+      originalDoctorName: appointment.doctorName,
+      doctorId: String(toDoctorId),
+      doctorName: targetDoctor.name,
+      isReferred: true,
+      currentReferralId: referral._id,
+    })
+
+    console.log("[v0] Appointment referred successfully:", {
+      appointmentId,
+      patientId: appointment.patientId,
+      fromDoctor: payload.userId,
+      fromDoctorName: payload.name,
+      toDoctor: String(toDoctorId),
+      toDoctorName: targetDoctor.name,
+    })
+
+    return NextResponse.json({ success: true, referral })
+  } catch (error) {
+    console.error("[v0] POST appointment referral error:", error)
+    return NextResponse.json({ error: "Failed to create referral" }, { status: 500 })
+  }
+}
