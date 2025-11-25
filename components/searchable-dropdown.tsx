@@ -47,8 +47,20 @@ export function SearchableDropdown({
     return item.name.toLowerCase().includes(term.toLowerCase())
   }
 
+  const defaultRenderItem = (item: any) => {
+    if (item.idNumber) {
+      return (
+        <span>
+          {item.name} <span className="text-muted-foreground text-sm">({item.idNumber})</span>
+        </span>
+      )
+    }
+    return item.name
+  }
+
   const filter = filterFn || defaultFilterFn
   const filteredItems = items.filter((item) => filter(item, searchTerm))
+  const render = renderItem || defaultRenderItem
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -103,7 +115,7 @@ export function SearchableDropdown({
             } ${disabled ? "opacity-50 cursor-not-allowed" : "hover:border-primary"}`}
           >
             <span className={selectedItem ? "text-foreground" : "text-muted-foreground"}>
-              {selectedItem ? (renderItem ? renderItem(selectedItem) : selectedItem.name) : placeholder}
+              {selectedItem ? render(selectedItem) : placeholder}
             </span>
             <ChevronDown
               className={`w-4 h-4 text-muted-foreground transition-transform flex-shrink-0 ml-2 ${isOpen ? "rotate-180" : ""}`}
@@ -125,18 +137,17 @@ export function SearchableDropdown({
           )}
 
           {/* Placeholder for clear button space when no item selected */}
-         {(!selectedItem || !clearable || disabled) && (
-  <button
-    className={`px-3 py-2 bg-input border border-l-0 rounded-r-lg hover:bg-muted transition-colors ${
-      error ? "border-destructive" : "border-border"
-    }`}
-    type="button"
-    title="Open dropdown"
-  >
-    <ChevronsDown className="w-4 h-4 text-muted-foreground hover:text-foreground" />
-  </button>
-)}
-
+          {(!selectedItem || !clearable || disabled) && (
+            <button
+              className={`px-3 py-2 bg-input border border-l-0 rounded-r-lg hover:bg-muted transition-colors ${
+                error ? "border-destructive" : "border-border"
+              }`}
+              type="button"
+              title="Open dropdown"
+            >
+              <ChevronsDown className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+            </button>
+          )}
         </div>
 
         {/* Dropdown Menu */}
@@ -176,7 +187,7 @@ export function SearchableDropdown({
                     }`}
                     type="button"
                   >
-                    {renderItem ? renderItem(item) : item.name}
+                    {render(item)}
                   </button>
                 ))
               )}

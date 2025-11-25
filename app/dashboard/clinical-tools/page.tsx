@@ -611,7 +611,7 @@ export default function ClinicalToolsPage() {
                           }`}
                         >
                           <div className="truncate">{patient.name}</div>
-                          <div className="text-xs opacity-75 truncate">{patient.phone}</div>
+                          <div className="text-xs opacity-75 truncate">{patient.idNumber}</div>
                         </button>
                       ))
                     )}

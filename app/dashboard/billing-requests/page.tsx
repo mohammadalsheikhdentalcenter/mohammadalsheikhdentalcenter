@@ -699,7 +699,7 @@ export default function BillingRequestsPage() {
                   <option value="">Select a patient...</option>
                   {patients.map((patient) => (
                     <option key={patient._id} value={patient._id}>
-                      {patient.name} ({patient.phone})
+                      {patient.name} ({patient.idNumber})
                     </option>
                   ))}
                 </select>

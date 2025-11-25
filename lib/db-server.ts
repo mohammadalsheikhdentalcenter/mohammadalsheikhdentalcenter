@@ -81,6 +81,18 @@ const patientSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 })
 
+patientSchema.index(
+  {
+    idNumber: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      idNumber: { $type: "string", $ne: "" },
+    },
+  },
+)
+
 // Create partial unique index for email - only enforce uniqueness for non-null emails
 patientSchema.index(
   {

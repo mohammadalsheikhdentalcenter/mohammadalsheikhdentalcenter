@@ -136,7 +136,7 @@ export function AddBillingRequestModal({
               <option value="">{loadingPatients ? "Loading patients..." : "Select a patient"}</option>
               {patients.map((patient) => (
                 <option key={patient._id} value={patient._id}>
-                  {patient.name}
+                  {patient.name} ({patient.idNumber})
                 </option>
               ))}
             </select>

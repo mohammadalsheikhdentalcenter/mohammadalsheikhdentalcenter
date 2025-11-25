@@ -403,7 +403,7 @@ export default function MedicalReportsPage() {
                             }}
                             className="w-full text-left px-4 py-2 hover:bg-muted transition-colors text-sm text-foreground"
                           >
-                            {p.name}
+                            {p.name} ({p.idNumber})
                           </button>
                         ))}
                       </div>

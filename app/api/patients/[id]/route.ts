@@ -2,7 +2,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import {
   Patient,
-  User,
   connectDB,
   ToothChart,
   Appointment,
@@ -63,19 +62,36 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     // Handle email in update data - convert empty strings to null
     if (updateData.email !== undefined) {
       updateData.email = updateData.email?.trim() || null
-      
+
       // Check for email uniqueness only if email is provided
       if (updateData.email) {
-        const existingPatient = await Patient.findOne({ 
-          email: updateData.email.toLowerCase(), 
-          _id: { $ne: id } 
+        const existingPatient = await Patient.findOne({
+          email: updateData.email.toLowerCase(),
+          _id: { $ne: id },
         })
         if (existingPatient) {
           return NextResponse.json(
             { error: "Email already exists in patient records. Please use a different email." },
-            { status: 409 }
+            { status: 409 },
           )
         }
+      }
+    }
+
+    if (updateData.idNumber) {
+      const trimmedIdNumber = updateData.idNumber.trim()
+      const existingPatientWithId = await Patient.findOne({
+        idNumber: trimmedIdNumber,
+        _id: { $ne: id },
+      })
+      if (existingPatientWithId) {
+        console.log("  ID number already exists:", trimmedIdNumber)
+        return NextResponse.json(
+          {
+            error: "ID number already exists. Please use a different ID number.",
+          },
+          { status: 409 },
+        )
       }
     }
 
@@ -116,15 +132,15 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ success: true, patient: updatedPatient })
   } catch (error) {
     console.error("  PUT /api/patients error:", error)
-    
+
     // Handle duplicate key error specifically
     if (error.code === 11000) {
       return NextResponse.json(
         { error: "Email already exists in patient records. Please use a different email." },
-        { status: 409 }
+        { status: 409 },
       )
     }
-    
+
     const errorMessage = error instanceof Error ? error.message : "Failed to update patient"
     return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
