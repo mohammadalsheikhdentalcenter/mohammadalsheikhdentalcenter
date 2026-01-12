@@ -15,11 +15,13 @@ interface Appointment {
   duration: number
   patientId: string
   doctorId: string
+  createdBy?: string
 }
 
 interface AppointmentsTableViewProps {
   appointments: Appointment[]
   userRole: string
+  userId?: string
   loading: {
     deleteAppointment: boolean
     cancelAppointment: boolean
@@ -36,6 +38,7 @@ interface AppointmentsTableViewProps {
 export function AppointmentsTableView({
   appointments,
   userRole,
+  userId,
   loading,
   onEdit,
   onDelete,
@@ -279,6 +282,18 @@ export function AppointmentsTableView({
                         )}
                         {userRole === "doctor" && apt.status !== "cancelled" && apt.status !== "completed" && (
                           <>
+                            {apt.status !== "completed" &&
+                              apt.status !== "closed" &&
+                              String(apt.createdBy) === String(userId) && (
+                                <button
+                                  onClick={() => onEdit(apt)}
+                                  disabled={loading.deleteAppointment || loading.cancelAppointment}
+                                  className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 text-xs"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  Edit
+                                </button>
+                              )}
                             <button
                               onClick={() => onCreateReport(apt)}
                               disabled={loading.createReport}

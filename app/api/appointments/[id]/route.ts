@@ -1,9 +1,15 @@
 //@ts-nocheck
 import { type NextRequest, NextResponse } from "next/server"
-import { Appointment, connectDB, User } from "@/lib/db-server"
+import { Appointment, connectDB } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
-import { sendAppointmentReschedule, sendAppointmentCancellation } from "@/lib/whatsapp-service"
+import { sendAppointmentReschedule, sendAppointmentCancellation, getAllPhoneNumbers } from "@/lib/whatsapp-service"
 import { validateAppointmentSchedulingServer } from "@/lib/appointment-validation-server"
+import { encryptData } from "@/lib/encryption"
+import { AppointmentReport } from "@/lib/db-server"
+import { Patient } from "@/lib/db-server"
+import { AppointmentReferral } from "@/lib/db-server"
+import { sendAppointmentCancellationEmail } from "@/lib/nodemailer-service"
+import { sendAppointmentRescheduleEmail } from "@/lib/nodemailer-service"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -22,7 +28,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
     console.log("🟠 [GET] Fetching appointment with ID:", id)
 
     const appointment = await Appointment.findById(id)
@@ -37,7 +43,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    if (payload.role === "doctor" && appointment.doctorId !== payload.userId) {
+    if (
+      payload.role === "doctor" &&
+      appointment.doctorId !== payload.userId &&
+      appointment.originalDoctorId !== payload.userId
+    ) {
       console.warn("🔴 [GET] Doctor trying to view another doctor's appointment")
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
@@ -71,33 +81,70 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params
     const updateData = await request.json()
     console.log("🟠 [PUT] Update data received:", updateData)
 
-    if (payload.role === "doctor") {
-      const appointment = await Appointment.findById(id)
-      if (appointment && appointment.doctorId !== payload.userId) {
-        console.warn("🔴 [PUT] Doctor trying to update another doctor's appointment")
-        return NextResponse.json({ error: "You can only manage your own appointments" }, { status: 403 })
-      }
-      // Doctors can now update all appointment fields for their own appointments
-    } else if (payload.role !== "admin" && payload.role !== "receptionist") {
-      console.warn("🔴 [PUT] Unauthorized role tried to update appointment:", payload.role)
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
-    }
-
+    // Find the appointment first
     const originalAppointment = await Appointment.findById(id)
     if (!originalAppointment) {
       console.warn("🔴 [PUT] Appointment not found for ID:", id)
       return NextResponse.json({ error: "Appointment not found" }, { status: 404 })
     }
 
-    console.log("🟠 [PUT] Original appointment found:", originalAppointment.status)
+    console.log("🟠 [PUT] Original appointment found:", {
+      id: originalAppointment._id,
+      doctorId: originalAppointment.doctorId,
+      originalDoctorId: originalAppointment.originalDoctorId,
+      isReferred: originalAppointment.isReferred,
+      status: originalAppointment.status,
+      createdBy: originalAppointment.createdBy,
+      currentUserId: payload.userId,
+    })
+
+    // Check permissions for doctors
+    if (payload.role === "doctor") {
+      const isOriginalDoctor = String(originalAppointment.originalDoctorId) === String(payload.userId)
+      const isCurrentDoctor = String(originalAppointment.doctorId) === String(payload.userId)
+      const isReferBack = originalAppointment.status === "refer_back"
+
+      console.log("🟠 [PUT] Doctor permission check:", {
+        isOriginalDoctor,
+        isCurrentDoctor,
+        isReferBack,
+        status: originalAppointment.status,
+      })
+
+      // Original doctor can manage when appointment is referred back
+      if (isReferBack && isOriginalDoctor) {
+        console.log("🟢 [PUT] Original doctor managing referred back appointment - allowed")
+      }
+      // Current doctor can manage their assigned appointments
+      else if (isCurrentDoctor) {
+        console.log("🟢 [PUT] Current doctor managing their appointment - allowed")
+      }
+      // Doctor can manage appointments they created (for non-referred cases)
+      else if (String(originalAppointment.createdBy) === String(payload.userId)) {
+        console.log("🟢 [PUT] Doctor managing appointment they created - allowed")
+      } else {
+        console.warn("🔴 [PUT] Doctor trying to manage appointment they don't own")
+        return NextResponse.json(
+          {
+            error: "You can only manage your own appointments",
+          },
+          { status: 403 },
+        )
+      }
+    }
+    // Admin and receptionist can always manage appointments
+    else if (payload.role !== "admin" && payload.role !== "receptionist") {
+      console.warn("🔴 [PUT] Unauthorized role tried to update appointment:", payload.role)
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
+
+    console.log("🟠 [PUT] Checking for medical report before closing appointment...")
 
     if (updateData.status === "closed" && originalAppointment.status !== "closed") {
-      console.log("🟠 [PUT] Checking for medical report before closing appointment...")
-      const { AppointmentReport } = await import("@/lib/db-server")
       const report = await AppointmentReport.findOne({
         appointmentId: id,
         patientId: originalAppointment.patientId,
@@ -112,8 +159,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
       console.log("🟢 [PUT] Medical report found, proceeding with closing appointment")
 
+      // If there's an active referral, mark it as completed
       if (originalAppointment.currentReferralId) {
-        const { AppointmentReferral } = await import("@/lib/db-server")
         await AppointmentReferral.findByIdAndUpdate(originalAppointment.currentReferralId, {
           status: "completed",
           notes: "Appointment closed by original doctor",
@@ -123,6 +170,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
+    // Validate time slot if date/time is being changed
     if (updateData.date || updateData.time) {
       const newDate = updateData.date || originalAppointment.date
       const newTime = updateData.time || originalAppointment.time
@@ -145,6 +193,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
+    // Apply the update
     const updatedAppointment = await Appointment.findByIdAndUpdate(id, updateData, { new: true })
     if (!updatedAppointment) {
       console.warn("🔴 [PUT] Failed to update appointment with ID:", id)
@@ -153,18 +202,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     console.log("🟢 [PUT] Appointment updated successfully")
 
-    // Fetch patient
-    const { Patient } = await import("@/lib/db-server")
+    // Fetch patient for notifications
     const patient = await Patient.findById(originalAppointment.patientId)
     console.log("🟠 [PUT] Patient found:", patient ? patient.name : "❌ No patient found")
 
-    if (patient && patient.phone) {
-      console.log("🟢 [PUT] Patient phone detected:", patient.phone)
+    const allPhoneNumbers = getAllPhoneNumbers(patient)
+    console.log("🟢 [PUT] Patient all phone numbers detected:", allPhoneNumbers)
 
+    if (patient && allPhoneNumbers.length > 0) {
+      console.log("🟢 [PUT] Patient phone numbers detected:", allPhoneNumbers)
+
+      // Handle appointment closure with medical report link
       if (updateData.status === "closed" && originalAppointment.status !== "closed") {
         console.log("🟠 [PUT] Appointment marked as closed — checking for medical report...")
 
-        const { AppointmentReport } = await import("@/lib/db-server")
         const report = await AppointmentReport.findOne({
           appointmentId: id,
           patientId: originalAppointment.patientId,
@@ -172,7 +223,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
         if (report) {
           console.log("🟠 [PUT] Medical report found — generating secure link...")
-          const { encryptData } = await import("@/lib/encryption")
 
           // Generate encrypted token with appointment and patient IDs
           const reportToken = encryptData(
@@ -184,10 +234,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
           const reportLink = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/public/reports/${reportToken}`
 
-          console.log("🟠 [PUT] Sending WhatsApp report link to patient...")
+          console.log("🟠 [PUT] Sending WhatsApp report link to all patient numbers...")
 
-          const { sendMedicalReportLink } = await import("@/lib/whatsapp-service")
-          const whatsappResult = await sendMedicalReportLink(patient.phone, patient.name, reportLink)
+          const whatsappResult = await sendAppointmentCancellation(allPhoneNumbers, patient.name, reportLink)
 
           console.log("🟣 [PUT] WhatsApp report link result:", whatsappResult)
 
@@ -206,10 +255,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         console.log("🟠 [PUT] Appointment marked as cancelled — sending WhatsApp cancellation...")
 
         const whatsappResult = await sendAppointmentCancellation(
-          patient.phone,
+          allPhoneNumbers,
           originalAppointment.patientName,
-          originalAppointment.doctorName,
           originalAppointment.date,
+          originalAppointment.time,
+          originalAppointment.doctorName,
         )
 
         console.log("🟣 [PUT] WhatsApp cancellation result:", whatsappResult)
@@ -222,12 +272,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
         if (patient.email) {
           console.log("  Sending email cancellation to patient:", patient.email)
-          const { sendAppointmentCancellationEmail } = await import("@/lib/nodemailer-service")
           const emailResult = await sendAppointmentCancellationEmail(
             patient.email,
             originalAppointment.patientName,
             originalAppointment.doctorName,
             originalAppointment.date,
+            originalAppointment.time,
           )
 
           if (!emailResult.success) {
@@ -249,11 +299,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         })
 
         const whatsappResult = await sendAppointmentReschedule(
-          patient.phone,
+          allPhoneNumbers,
           originalAppointment.patientName,
-          originalAppointment.doctorName,
           newDate,
           newTime,
+          originalAppointment.doctorName,
         )
 
         console.log("🟣 [PUT] WhatsApp reschedule result:", whatsappResult)
@@ -266,7 +316,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
         if (patient.email) {
           console.log("  Sending email reschedule to patient:", patient.email)
-          const { sendAppointmentRescheduleEmail } = await import("@/lib/nodemailer-service")
           const emailResult = await sendAppointmentRescheduleEmail(
             patient.email,
             originalAppointment.patientName,
@@ -325,7 +374,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    const { id } = await params
+    const { id } = params
     console.log("🟠 [DELETE] Deleting appointment with ID:", id)
 
     const deletedAppointment = await Appointment.findByIdAndDelete(id)
@@ -336,21 +385,23 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     console.log("🟢 [DELETE] Appointment deleted successfully:", deletedAppointment._id)
 
-    const { AppointmentReferral } = await import("@/lib/db-server")
     const deletedReferrals = await AppointmentReferral.deleteMany({ appointmentId: id })
     console.log("🟢 [DELETE] Deleted appointment referrals:", deletedReferrals.deletedCount)
 
-    const patient = await User.findById(deletedAppointment.patientId)
+    const patient = await Patient.findById(deletedAppointment.patientId)
     console.log("🟠 [DELETE] Patient found for notification:", patient ? patient.name : "❌ None")
 
-    if (patient && patient.phone) {
-      console.log("🟢 [DELETE] Sending WhatsApp cancellation notification to:", patient.phone)
+    const allPhoneNumbers = getAllPhoneNumbers(patient)
+
+    if (patient && allPhoneNumbers.length > 0) {
+      console.log("🟢 [DELETE] Sending WhatsApp cancellation notification to:", allPhoneNumbers)
 
       const whatsappResult = await sendAppointmentCancellation(
-        patient.phone,
+        allPhoneNumbers,
         deletedAppointment.patientName,
-        deletedAppointment.doctorName,
         deletedAppointment.date,
+        deletedAppointment.time,
+        deletedAppointment.doctorName,
       )
 
       console.log("🟣 [DELETE] WhatsApp cancellation result:", whatsappResult)
@@ -366,7 +417,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     if (patient && patient.email) {
       console.log("  Sending email cancellation to patient:", patient.email)
-      const { sendAppointmentCancellationEmail } = await import("@/lib/nodemailer-service")
       const emailResult = await sendAppointmentCancellationEmail(
         patient.email,
         deletedAppointment.patientName,

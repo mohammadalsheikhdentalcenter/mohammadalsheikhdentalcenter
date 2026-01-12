@@ -43,7 +43,7 @@ export default function RequestStatusPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "in-progress" | "completed" | "rejected">("all")
   const [selectedReferral, setSelectedReferral] = useState<PatientReferral | null>(null)
-  const [activeTab, setActiveTab] = useState<"patient-referrals" | "appointment-referrals">("patient-referrals")
+  const [activeTab, setActiveTab] = useState<"patient-referrals" | "appointment-referrals">("appointment-referrals")
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   useEffect(() => {
@@ -124,19 +124,7 @@ export default function RequestStatusPage() {
 
             {/* Tab Navigation - Responsive */}
             <div className="flex gap-1 sm:gap-2 mb-4 sm:mb-6 border-b border-border overflow-x-auto">
-              <button
-                onClick={() => setActiveTab("patient-referrals")}
-                className={`px-3 sm:px-4 py-2 font-medium text-xs sm:text-sm transition-colors relative whitespace-nowrap ${
-                  activeTab === "patient-referrals"
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Patient Referrals
-                {activeTab === "patient-referrals" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
-                )}
-              </button>
+              
               <button
                 onClick={() => setActiveTab("appointment-referrals")}
                 className={`px-3 sm:px-4 py-2 font-medium text-xs sm:text-sm transition-colors relative whitespace-nowrap ${
@@ -147,6 +135,19 @@ export default function RequestStatusPage() {
               >
                 Refer Appointment Requests
                 {activeTab === "appointment-referrals" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                )}
+              </button>
+              <button
+                onClick={() => setActiveTab("patient-referrals")}
+                className={`px-3 sm:px-4 py-2 font-medium text-xs sm:text-sm transition-colors relative whitespace-nowrap ${
+                  activeTab === "patient-referrals"
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Patient Referrals
+                {activeTab === "patient-referrals" && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                 )}
               </button>
@@ -280,7 +281,7 @@ export default function RequestStatusPage() {
                               <td className="px-3 sm:px-4 md:px-6 py-3">
                                 <div className="flex flex-col gap-1">
                                   <span
-                                    className={`inline-block text-xs px-2 py-1 rounded-full font-medium ${getStatusBadgeColor(referral.status)}`}
+                                    className={`inline-block text-xs px-2 py-1 rounded-full font-medium w-[80px] ${getStatusBadgeColor(referral.status)}`}
                                   >
                                     {referral.status.charAt(0).toUpperCase() + referral.status.slice(1).replace("-", " ")}
                                   </span>

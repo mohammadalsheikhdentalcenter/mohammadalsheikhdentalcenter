@@ -44,7 +44,13 @@ userSchema.pre("save", async function (next) {
 
 const patientSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  phone: { type: String, required: true },
+  phones: [
+    {
+      number: { type: String, required: true },
+      isPrimary: { type: Boolean, default: false },
+    },
+  ],
+
   email: {
     type: String,
     required: false,
@@ -113,14 +119,23 @@ const appointmentSchema = new mongoose.Schema({
   doctorName: { type: String, required: true },
   date: { type: String, required: true },
   time: { type: String, required: true },
-  type: { type: String, enum: ["Consultation", "Cleaning", "Filling", "Root Canal"], required: true },
-  status: { type: String, enum: ["pending", "confirmed", "completed", "cancelled", "closed"], default: "pending" },
+  type: { type: String, enum: ["Consultation", "Cleaning", "Filling", "Root Canal", "Other"], required: true },
+  status: {
+    type: String,
+    enum: ["pending", "confirmed", "completed", "cancelled", "closed", "refer_back"],
+    default: "pending",
+  },
   roomNumber: String,
   duration: Number,
-  originalDoctorId: { type: String, default: null }, // Track the original doctor when referred
+  originalDoctorId: { type: String, default: null },
   originalDoctorName: { type: String, default: null },
-  isReferred: { type: Boolean, default: false }, // Flag to indicate if appointment is currently referred
-  currentReferralId: { type: mongoose.Schema.Types.ObjectId, ref: "AppointmentReferral", default: null }, // Link to active referral
+  isReferred: { type: Boolean, default: false },
+  currentReferralId: { type: mongoose.Schema.Types.ObjectId, ref: "AppointmentReferral", default: null },
+  referralNotes: { type: String, default: "" },
+  lastReferBackDate: { type: Date, default: null },
+  awaitingOriginalDoctorAction: { type: Boolean, default: false },
+  createdBy: { type: String, default: null }, // Add this field
+  createdByName: { type: String, default: null }, // Add this field
   createdAt: { type: Date, default: Date.now },
 })
 
@@ -146,9 +161,25 @@ const billingSchema = new mongoose.Schema({
   ],
   totalAmount: { type: Number, required: true },
   paidAmount: { type: Number, default: 0 },
+  transactions: [
+    {
+      _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+      transactionId: { type: String, required: true },
+      paymentStatus: { type: String, enum: ["Paid", "Partially Paid"], default: "Paid" },
+      paymentSplits: [
+        {
+          paymentType: { type: String, required: true },
+          amount: { type: Number, required: true },
+        },
+      ],
+      totalAmount: { type: Number, required: true },
+      date: { type: Date, default: Date.now },
+      notes: String,
+    },
+  ],
   paymentSplits: [
     {
-      paymentType: { type: String, required: true }, // "MasterCard", "Cash", "Insurance", etc.
+      paymentType: { type: String, required: true },
       amount: { type: Number, required: true },
       _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
     },
@@ -218,6 +249,7 @@ const appointmentReportSchema = new mongoose.Schema({
   appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Appointment", required: true },
   patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
   doctorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  doctorName: { type: String, required: true },
   procedures: [
     {
       name: String,
@@ -228,8 +260,20 @@ const appointmentReportSchema = new mongoose.Schema({
   ],
   findings: String,
   notes: String,
-  nextVisit: Date,
+  nextVisitDate: {
+    type: Date,
+    default: null,
+  },
+  nextVisitTime: {
+    type: String,
+    default: null,
+  },
   followUpDetails: String,
+  signature: { type: String, default: null },
+  doctorRole: { type: String, enum: ["original", "referred"], default: "original" },
+  referralId: { type: mongoose.Schema.Types.ObjectId, ref: "AppointmentReferral", default: null },
+  reportStatus: { type: String, enum: ["draft", "submitted", "reviewed", "approved"], default: "submitted" },
+  previousReportId: { type: mongoose.Schema.Types.ObjectId, ref: "AppointmentReport", default: null },
   createdAt: { type: Date, default: Date.now },
 })
 
@@ -238,7 +282,13 @@ const patientReferralSchema = new mongoose.Schema({
   doctorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   doctorName: { type: String, required: true },
   patientName: { type: String, required: true },
-  phone: { type: String, required: true },
+  patientPhone: { type: String, default: null },
+  phones: [
+    {
+      number: { type: String, required: true },
+      isPrimary: { type: Boolean, default: false },
+    },
+  ],
   email: { type: String, default: null },
   dob: { type: String, required: true },
   idNumber: { type: String, default: "" },
@@ -248,7 +298,7 @@ const patientReferralSchema = new mongoose.Schema({
   allergies: { type: [String], default: [] },
   medicalConditions: { type: [String], default: [] },
   medicalHistory: { type: String, default: "" },
-  photoUrl: { type: String, default: null }, // Will be uploaded by receptionist/admin
+  photoUrl: { type: String, default: null },
   status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
   referralDate: { type: Date, default: Date.now },
   processedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
@@ -262,17 +312,24 @@ const patientReferralRequestSchema = new mongoose.Schema({
   doctorId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   doctorName: { type: String, required: true },
   patientName: { type: String, required: true },
-  patientPhone: { type: String, required: true },
+  patientPhones: [
+    {
+      number: { type: String, required: true },
+      isPrimary: { type: Boolean, default: false },
+    },
+  ],
   patientEmail: { type: String, default: "" },
   patientDob: { type: String, required: true },
   patientIdNumber: { type: String, default: "" },
   patientAddress: { type: String, default: "" },
+  patientInsuranceProvider: { type: String, default: "" },
+  patientInsuranceNumber: { type: String, default: "" },
   patientAllergies: { type: [String], default: [] },
   patientMedicalConditions: { type: [String], default: [] },
   referralReason: { type: String, required: true },
   status: { type: String, enum: ["pending", "processing", "completed", "rejected"], default: "pending" },
   pictureUrl: { type: String, default: null },
-  pictureSavedBy: { type: String, default: null }, // receptionist or admin who uploaded the picture
+  pictureSavedBy: { type: String, default: null },
   appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: "Appointment", default: null },
   notes: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now },
@@ -291,7 +348,7 @@ const appointmentReferralSchema = new mongoose.Schema({
   referralReason: { type: String, required: true },
   status: {
     type: String,
-    enum: ["pending", "accepted", "completed", "referred_back", "rejected"], // ← ADD "rejected" HERE
+    enum: ["pending", "accepted", "completed", "referred_back", "rejected"],
     default: "pending",
   },
   notes: { type: String, default: "" },
@@ -312,8 +369,12 @@ export const AppointmentReport =
   mongoose.models.AppointmentReport || mongoose.model("AppointmentReport", appointmentReportSchema)
 export const PatientReferral =
   mongoose.models.PatientReferral || mongoose.model("PatientReferral", patientReferralSchema)
-export const PatientReferralRequest =
-  mongoose.models.PatientReferralRequest || mongoose.model("PatientReferralRequest", patientReferralRequestSchema)
+
+if (mongoose.models.PatientReferralRequest) {
+  delete mongoose.models.PatientReferralRequest
+}
+export const PatientReferralRequest = mongoose.model("PatientReferralRequest", patientReferralRequestSchema)
+
 export const AppointmentReferral =
   mongoose.models.AppointmentReferral || mongoose.model("AppointmentReferral", appointmentReferralSchema)
 
@@ -407,7 +468,12 @@ export async function initializeDB() {
         if (!patientExists) {
           await Patient.create({
             name: "John Doe",
-            phone: "9876543210",
+            phones: [
+              {
+                number: "9876543210",
+                isPrimary: true,
+              },
+            ],
             email: "john@example.com",
             dob: "1990-05-15",
             idNumber: "ID123456",

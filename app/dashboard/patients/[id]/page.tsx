@@ -109,7 +109,9 @@ export default function PatientDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4 mb-6 md:mb-8">
               <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase">Phone</p>
-                <p className="text-foreground font-medium text-sm sm:text-base truncate">{patient.phone}</p>
+                <p className="text-foreground font-medium text-sm sm:text-base truncate">
+                  {patient.phones?.find((p: any) => p.isPrimary)?.number || patient.phone || "N/A"}
+                </p>
               </div>
               <div className="bg-card border border-border rounded-lg p-3 sm:p-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase">Email</p>

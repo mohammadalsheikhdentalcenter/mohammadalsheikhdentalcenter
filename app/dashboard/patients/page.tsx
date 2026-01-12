@@ -52,7 +52,7 @@ export default function PatientsPage() {
 
   const [formData, setFormData] = useState({
     name: "",
-    phone: "",
+    phones: [{ number: "", isPrimary: true }],
     email: "",
     dob: "",
     idNumber: "",
@@ -62,7 +62,7 @@ export default function PatientsPage() {
     allergies: "",
     medicalConditions: "",
     assignedDoctorId: "",
-    photoUrl: "", // added photoUrl to form data
+    photoUrl: "",
   })
   const [doctors, setDoctors] = useState([])
   const [editingMedicalInfo, setEditingMedicalInfo] = useState(false)
@@ -166,7 +166,7 @@ export default function PatientsPage() {
     const searchLower = searchTerm.toLowerCase()
     return (
       patient.name?.toLowerCase().includes(searchLower) ||
-      patient.phone?.toLowerCase().includes(searchLower) ||
+      patient.phones?.some((p: any) => p.number?.toLowerCase().includes(searchLower)) ||
       patient.email?.toLowerCase().includes(searchLower) ||
       patient.idNumber?.toLowerCase().includes(searchLower) ||
       patient.assignedDoctorId?.name?.toLowerCase().includes(searchLower) ||
@@ -186,12 +186,104 @@ export default function PatientsPage() {
     setCurrentPage(1)
   }, [searchTerm, itemsPerPage])
 
+  const addPhoneField = () => {
+    setFormData({
+      ...formData,
+      phones: [...formData.phones, { number: "", isPrimary: false }],
+    })
+  }
+
+  const removePhoneField = (index: number) => {
+    const updatedPhones = formData.phones.filter((_, i) => i !== index)
+    if (updatedPhones.length > 0 && formData.phones[index].isPrimary) {
+      updatedPhones[0].isPrimary = true
+    }
+    setFormData({
+      ...formData,
+      phones: updatedPhones.length > 0 ? updatedPhones : [{ number: "", isPrimary: true }],
+    })
+  }
+
+  const updatePhoneField = (index: number, value: string, isPrimary?: boolean) => {
+    const updatedPhones = [...formData.phones]
+    updatedPhones[index].number = value
+    if (isPrimary !== undefined) {
+      updatedPhones[index].isPrimary = isPrimary
+      if (isPrimary) {
+        updatedPhones.forEach((phone, i) => {
+          if (i !== index) phone.isPrimary = false
+        })
+      }
+    }
+    setFormData({
+      ...formData,
+      phones: updatedPhones,
+    })
+  }
+
+  const validatePhoneInput = (phone: string): { valid: boolean; error?: string } => {
+    if (!phone) {
+      return { valid: false, error: "Phone number is required" }
+    }
+
+    const phoneStr = String(phone).trim()
+
+    if (phoneStr === "") {
+      return { valid: false, error: "Phone number is required" }
+    }
+
+    // Check if it starts with +
+    if (!phoneStr.startsWith("+")) {
+      return {
+        valid: false,
+        error: "Phone must start with + (country code, e.g., +1234567890)",
+      }
+    }
+
+    // Get digits after +
+    const digitsOnly = phoneStr.slice(1)
+
+    // Check if contains only digits
+    if (!/^\d+$/.test(digitsOnly)) {
+      return { valid: false, error: "Phone must contain only digits after +" }
+    }
+
+    return { valid: true }
+  }
+
+  const validatePhoneInputStrict = (phone: string): { valid: boolean; error?: string } => {
+    const basicValidation = validatePhoneInput(phone)
+    if (!basicValidation.valid) {
+      return basicValidation
+    }
+
+    const phoneStr = String(phone).trim()
+    const digitsOnly = phoneStr.slice(1)
+
+    // Check length only on form submission
+    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+      return { valid: false, error: "Phone must be 10-15 digits after +" }
+    }
+
+    return { valid: true }
+  }
+
   const validatePatientCredentials = (data: any) => {
     const criticalCredentials: string[] = []
     const warningCredentials: string[] = []
 
     if (!data.idNumber?.trim()) criticalCredentials.push("ID Number")
-    if (!data.phone?.trim()) criticalCredentials.push("Phone Number")
+    
+    // Check if phones array exists and has at least one valid phone
+    const hasValidPhone = data.phones && 
+      Array.isArray(data.phones) && 
+      data.phones.some((p: any) => {
+        const phoneNumber = p?.number?.trim()
+        return phoneNumber && phoneNumber !== "" && validatePhoneInputStrict(phoneNumber).valid
+      })
+    
+    if (!hasValidPhone) criticalCredentials.push("Phone Number")
+    
     if (!data.dob?.trim()) criticalCredentials.push("Date of Birth")
     if (!data.name?.trim()) criticalCredentials.push("Name")
 
@@ -244,25 +336,14 @@ export default function PatientsPage() {
       }
     }
 
-    // Ensure phone number starts with +
-    let phoneNumber = formData.phone
-    if (phoneNumber && !phoneNumber.startsWith("+")) {
-      phoneNumber = "+" + phoneNumber.replace(/\D/g, "")
-      console.log("[v0] Fixed phone number format:", phoneNumber)
-    }
-
-    const phoneValidation = validatePhoneInputStrict(phoneNumber)
-    if (!phoneValidation.valid) {
-      toast.error(phoneValidation.error)
-      setLoading((prev) => ({ ...prev, [loadingKey]: false }))
-      return
-    }
-
     // Validate credentials
     const validation = validatePatientCredentials({
       ...formData,
-      phone: phoneNumber,
     })
+
+    // Log for debugging
+    console.log("Form data before validation:", formData)
+    console.log("Validation result:", validation)
 
     // Block if critical credentials are missing
     if (validation.criticalCredentials.length > 0) {
@@ -287,24 +368,75 @@ export default function PatientsPage() {
     // Show modal for missing non-critical credentials - DON'T reset loading here
     if (validation.warningCredentials.length > 0) {
       setCredentialWarnings(validation.warningCredentials)
-      setPendingSubmit(() => () => submitPatientData(loadingKey, phoneNumber))
+      setPendingSubmit(() => () => submitPatientData(loadingKey))
       setShowCredentialWarning(true)
       // DON'T reset loading state here - keep it true so the button shows loading
       return
     }
 
     // If no warnings, proceed directly
-    await submitPatientData(loadingKey, phoneNumber)
+    await submitPatientData(loadingKey)
   }
 
   // Separate function to handle the actual submission
-  const submitPatientData = async (loadingKey: string, phoneNumber: string) => {
+  const submitPatientData = async (loadingKey: string) => {
     try {
+      // Filter out empty phones and validate each phone
+      const validPhones = formData.phones
+        .filter((p) => {
+          const phoneNumber = p.number?.trim()
+          if (!phoneNumber) return false
+          
+          const validation = validatePhoneInputStrict(phoneNumber)
+          if (!validation.valid) {
+            toast.error(`Invalid phone number: ${validation.error}`)
+            return false
+          }
+          return true
+        })
+        .map((p) => ({
+          number: formatPhoneForDatabase(p.number),
+          isPrimary: p.isPrimary || false,
+        }))
+
+      // Ensure at least one phone
+      if (validPhones.length === 0) {
+        toast.error("At least one valid phone number is required")
+        setLoading((prev) => ({ ...prev, [loadingKey]: false }))
+        return
+      }
+
+      // Ensure exactly one primary phone
+      if (!validPhones.some((p) => p.isPrimary)) {
+        validPhones[0].isPrimary = true
+      }
+
       const method = editingPatient ? "PUT" : "POST"
       const url = editingPatient ? `/api/patients/${editingPatient}` : "/api/patients"
 
-      const formattedPhone = formatPhoneForDatabase(phoneNumber)
-      console.log("  Submitting phone:", phoneNumber, "Formatted:", formattedPhone)
+      // Prepare the data for API
+      const patientData = {
+        name: formData.name.trim(),
+        phones: validPhones,
+        email: formData.email?.trim() || "",
+        dob: formData.dob,
+        idNumber: formData.idNumber?.trim() || "",
+        address: formData.address?.trim() || "",
+        insuranceProvider: formData.insuranceProvider?.trim() || "",
+        insuranceNumber: formData.insuranceNumber?.trim() || "",
+        allergies: formData.allergies
+          .split(",")
+          .map((a) => a.trim())
+          .filter(Boolean),
+        medicalConditions: formData.medicalConditions
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean),
+        assignedDoctorId: formData.assignedDoctorId,
+        photoUrl: formData.photoUrl || null,
+      }
+
+      console.log("Sending patient data:", patientData)
 
       const res = await fetch(url, {
         method,
@@ -312,43 +444,52 @@ export default function PatientsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          ...formData,
-          phone: formattedPhone,
-          email: formData.email || "", // Ensure empty string if not provided
-          address: formData.address || "",
-          insuranceProvider: formData.insuranceProvider || "", // Ensure empty string if not provided
-          insuranceNumber: formData.insuranceNumber || "",
-          photoUrl: formData.photoUrl || null,
-          allergies: formData.allergies
-            .split(",")
-            .map((a) => a.trim())
-            .filter(Boolean),
-          medicalConditions: formData.medicalConditions
-            .split(",")
-            .map((c) => c.trim())
-            .filter(Boolean),
-        }),
+        body: JSON.stringify(patientData),
       })
 
+      const responseText = await res.text()
+      console.log("API Response:", responseText)
+
       if (res.ok) {
-        const data = await res.json()
+        const data = JSON.parse(responseText)
         if (editingPatient) {
           setPatients(patients.map((p) => (p._id === editingPatient ? data.patient : p)))
         } else {
           setPatients([...patients, data.patient])
         }
-        setEditingPatient(null)
+
+        setFormData({
+          name: "",
+          phones: [{ number: "", isPrimary: true }],
+          email: "",
+          dob: "",
+          idNumber: "",
+          address: "",
+          insuranceProvider: "",
+          insuranceNumber: "",
+          allergies: "",
+          medicalConditions: "",
+          assignedDoctorId: "",
+          photoUrl: "",
+        })
+
         setShowForm(false)
-        toast.success(`Patient ${editingPatient ? "updated" : "added"} successfully.`)
+        setEditingPatient(null)
+        toast.success(editingPatient ? "Patient updated successfully" : "Patient added successfully")
       } else {
-        const error = await res.json()
-        toast.error(error.error || "Failed to save patient")
+        try {
+          const error = JSON.parse(responseText)
+          toast.error(error.error || "Failed to save patient")
+        } catch {
+          toast.error("Failed to save patient")
+        }
       }
-    } catch (error) {
-      console.log("  Fetch error:", error)
-      toast.error(error instanceof Error ? error.message : "Error saving patient")
-    } finally {
+      setLoading((prev) => ({ ...prev, [loadingKey]: false }))
+      setShowCredentialWarning(false)
+      setPendingSubmit(null)
+    } catch (error: any) {
+      console.error("Submit error:", error)
+      toast.error(error.message || "Failed to save patient")
       setLoading((prev) => ({ ...prev, [loadingKey]: false }))
     }
   }
@@ -371,53 +512,6 @@ export default function PatientsPage() {
     setShowCredentialWarning(false)
     setPendingSubmit(null)
     setCredentialWarnings([])
-  }
-
-  const validatePhoneInput = (phone: string): { valid: boolean; error?: string } => {
-    if (!phone) {
-      return { valid: false, error: "Phone number is required" }
-    }
-
-    const phoneStr = String(phone).trim()
-
-    if (phoneStr === "") {
-      return { valid: false, error: "Phone number is required" }
-    }
-
-    // Check if it starts with +
-    if (!phoneStr.startsWith("+")) {
-      return {
-        valid: false,
-        error: "Phone must start with + (country code, e.g., +1234567890)",
-      }
-    }
-
-    // Get digits after +
-    const digitsOnly = phoneStr.slice(1)
-
-    // Check if contains only digits
-    if (!/^\d+$/.test(digitsOnly)) {
-      return { valid: false, error: "Phone must contain only digits after +" }
-    }
-
-    return { valid: true }
-  }
-
-  const validatePhoneInputStrict = (phone: string): { valid: boolean; error?: string } => {
-    const basicValidation = validatePhoneInput(phone)
-    if (!basicValidation.valid) {
-      return basicValidation
-    }
-
-    const phoneStr = String(phone).trim()
-    const digitsOnly = phoneStr.slice(1)
-
-    // Check length only on form submission
-    if (digitsOnly.length < 10 || digitsOnly.length > 15) {
-      return { valid: false, error: "Phone must be 10-15 digits after +" }
-    }
-
-    return { valid: true }
   }
 
   const handleDeletePatient = async (patientId: string) => {
@@ -445,6 +539,7 @@ export default function PatientsPage() {
 
   const handleEditPatient = (patient: any) => {
     setEditingPatient(patient._id)
+
     let doctorId = ""
     if (patient.assignedDoctorId) {
       const assignedDoctor = doctors.find(
@@ -454,28 +549,27 @@ export default function PatientsPage() {
       doctorId = assignedDoctor?.id || patient.assignedDoctorId._id?.toString() || ""
     }
 
-    const displayPhone = formatPhoneForDisplay(patient.phone)
-
-    console.log("Editing patient data:", {
-      // Debug log
-      insuranceNumber: patient.insuranceNumber,
-      insuranceProvider: patient.insuranceProvider,
-      address: patient.address,
-    })
+    // Map phones from patient data - handle both old and new structure
+    const phones = patient.phones && Array.isArray(patient.phones)
+      ? patient.phones.map((p: any) => ({
+          number: p.number || "",
+          isPrimary: p.isPrimary || false,
+        }))
+      : [{ number: patient.phone || "", isPrimary: true }]
 
     setFormData({
-      name: patient.name,
-      phone: displayPhone,
-      email: patient.email,
-      dob: patient.dob,
+      name: patient.name || "",
+      phones: phones,
+      email: patient.email || "",
+      dob: patient.dob || "",
       idNumber: patient.idNumber || "",
       address: patient.address || "",
       insuranceProvider: patient.insuranceProvider || "",
-      insuranceNumber: patient.insuranceNumber || "", // Ensure this is set
+      insuranceNumber: patient.insuranceNumber || "",
       allergies: patient.allergies?.join(", ") || "",
       medicalConditions: patient.medicalConditions?.join(", ") || "",
-      assignedDoctorId: doctorId,
-      photoUrl: patient.photoUrl || "", // set photoUrl from patient data
+      assignedDoctorId: patient.assignedDoctorId?._id || patient.assignedDoctorId || "",
+      photoUrl: patient.photoUrl || "",
     })
     setShowForm(true)
   }
@@ -502,7 +596,7 @@ export default function PatientsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.JSON.stringify({
+        body: JSON.stringify({
           medicalHistory: medicalFormData.medicalHistory,
           allergies: medicalFormData.allergies
             .split(",")
@@ -634,7 +728,7 @@ export default function PatientsPage() {
                       if (!showForm) {
                         setFormData({
                           name: "",
-                          phone: "",
+                          phones: [{ number: "", isPrimary: true }],
                           email: "",
                           dob: "",
                           idNumber: "",
@@ -644,9 +738,8 @@ export default function PatientsPage() {
                           allergies: "",
                           medicalConditions: "",
                           assignedDoctorId: "",
-                          photoUrl: "", // Reset photoUrl when closing form
+                          photoUrl: "",
                         })
-                        // Reset showPhotoUpload state when closing the form
                         setShowPhotoUpload(false)
                       }
                     }}
@@ -694,7 +787,6 @@ export default function PatientsPage() {
                             className="w-20 h-20 rounded-lg object-cover border border-border"
                           />
                         )}
-                        {/* Replace the old photo upload button with the new square dotted input */}
                         {showPhotoUpload ? (
                           <div className="space-y-4">
                             <h3 className="font-semibold text-foreground">Upload Patient Photo</h3>
@@ -744,30 +836,62 @@ export default function PatientsPage() {
                       disabled={loading.addPatient || loading.updatePatient}
                     />
                     <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-foreground mb-2">Phone Number *</label>
-                      <PhoneInput
-                        international
-                        countryCallingCodeEditable={false}
-                        defaultCountry="US"
-                        value={formData.phone}
-                        onChange={(value) => {
-                          console.log("PhoneInput onChange:", value)
-                          setFormData({ ...formData, phone: value || "" })
-                        }}
-                        onBlur={() => {
-                          console.log("PhoneInput onBlur:", formData.phone)
-                          if (formData.phone && formData.phone.trim()) {
-                            const validation = validatePhoneInput(formData.phone)
-                            if (!validation.valid) {
-                              toast.error(validation.error)
-                            }
-                          }
-                        }}
-                        className="phone-input-wrapper"
-                        disabled={loading.addPatient || loading.updatePatient}
-                      />
+                      <label className="block text-sm font-medium text-foreground mb-2">Phone Numbers *</label>
+                      <div className="space-y-2">
+                        {formData.phones.map((phone, index) => (
+                          <div key={index} className="flex gap-2 items-center">
+                            <div className="flex-1">
+                              <PhoneInput
+                                international
+                                countryCallingCodeEditable={false}
+                                defaultCountry="US"
+                                value={phone.number}
+                                onChange={(value) => updatePhoneField(index, value || "", phone.isPrimary)}
+                                onBlur={() => {
+                                  if (phone.number && phone.number.trim()) {
+                                    const validation = validatePhoneInput(phone.number)
+                                    if (!validation.valid) {
+                                      toast.error(validation.error)
+                                    }
+                                  }
+                                }}
+                                className="phone-input-wrapper"
+                                disabled={loading.addPatient || loading.updatePatient}
+                              />
+                            </div>
+                            <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                              <input
+                                type="checkbox"
+                                checked={phone.isPrimary}
+                                onChange={(e) => updatePhoneField(index, phone.number, e.target.checked)}
+                                disabled={loading.addPatient || loading.updatePatient}
+                                className="w-4 h-4"
+                              />
+                              Primary
+                            </label>
+                            {formData.phones.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removePhoneField(index)}
+                                className="p-2 text-red-500 bg-red-50 rounded cursor-pointer"
+                                disabled={loading.addPatient || loading.updatePatient}
+                              >
+                                <X size={18} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={addPhoneField}
+                          className="mt-2 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 cursor-pointer disabled:cursor-not-allowed rounded-md"
+                          disabled={loading.addPatient || loading.updatePatient}
+                        >
+                          <Plus size={16} className="inline mr-1" /> Add Phone
+                        </button>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Format: + followed by country code and number (e.g., +1234567890)
+                        Format: + followed by country code and number. Mark one as primary for WhatsApp.
                       </p>
                     </div>
                     <input
@@ -959,7 +1083,6 @@ export default function PatientsPage() {
                   <tbody>
                     {loading.patients ? (
                       <tr>
-                        {/* adjusted colspan for new column */}
                         <td colSpan={6} className="px-4 sm:px-6 py-8 text-center">
                           <div className="flex flex-col items-center justify-center gap-3">
                             <div className="flex justify-center items-center gap-2">
@@ -1002,7 +1125,7 @@ export default function PatientsPage() {
                           <td className="px-4 sm:px-6 py-3 text-muted-foreground hidden sm:table-cell">
                             <div>
                               <div className="md:hidden text-xs text-muted-foreground mb-1">Phone</div>
-                              {formatPhoneForDisplay(patient.phone)}
+                              {formatPhoneForDisplay(patient.phones?.find((p: any) => p.isPrimary)?.number)}
                             </div>
                           </td>
                           <td className="px-4 sm:px-6 py-3 text-muted-foreground hidden md:table-cell">
@@ -1071,7 +1194,6 @@ export default function PatientsPage() {
                       ))
                     ) : (
                       <tr>
-                        {/* adjusted colspan for new column */}
                         <td colSpan={6} className="px-4 sm:px-6 py-8 text-center text-muted-foreground">
                           {searchTerm ? "No patients found matching your search" : "No patients found"}
                         </td>
@@ -1288,7 +1410,8 @@ export default function PatientsPage() {
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 py-1">
                           <span className="text-muted-foreground font-medium text-xs sm:text-sm">Phone:</span>
                           <span className="text-foreground font-semibold text-sm sm:text-base">
-                            {formatPhoneForDisplay(selectedPatient.phone)}
+                            {formatPhoneForDisplay(selectedPatient.phones?.find((p: any) => p.isPrimary)?.number) ||
+                              "Not provided"}
                           </span>
                         </div>
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 py-1">
@@ -1535,7 +1658,8 @@ export default function PatientsPage() {
                         <option value="">Select a patient...</option>
                         {patients.map((patient) => (
                           <option key={patient._id} value={patient._id}>
-                            {patient.name} ({formatPhoneForDisplay(patient.phone)})
+                            {patient.name} (
+                            {formatPhoneForDisplay(patient.phones?.find((p: any) => p.isPrimary)?.number)})
                           </option>
                         ))}
                       </select>

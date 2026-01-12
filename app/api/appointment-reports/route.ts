@@ -27,15 +27,12 @@ export async function GET(request: NextRequest) {
 
     if (appointmentId) {
       query.appointmentId = appointmentId
-      // Don't filter by doctorId when checking specific appointment - any doctor's report counts
     } else if (payload?.role === "doctor") {
-      // This allows doctors to see reports created by referred doctors on their appointments
+      // Doctor sees all reports for their appointments
       console.log("[v0] Fetching all appointment reports for doctor view")
-      // No doctorId filter - doctor will see all reports and filter on frontend based on appointments they own
     } else if (payload?.role === "admin" || payload?.role === "receptionist") {
       // Admin and receptionist see all reports
     } else if (patientId) {
-      // For patients, only show their own reports
       query.patientId = patientId
     }
 
@@ -49,9 +46,24 @@ export async function GET(request: NextRequest) {
       .populate("appointmentId", "date time type")
       .sort({ createdAt: -1 })
 
-    return NextResponse.json({ success: true, reports })
+    const reportsWithPrevious = await Promise.all(
+      reports.map(async (report: any) => {
+        if (report.previousReportId) {
+          const prevReport = await AppointmentReport.findById(report.previousReportId).select(
+            "findings notes doctorName doctorRole createdAt",
+          )
+          return {
+            ...report.toObject(),
+            previousReport: prevReport ? prevReport.toObject() : null,
+          }
+        }
+        return report.toObject()
+      }),
+    )
+
+    return NextResponse.json({ success: true, reports: reportsWithPrevious })
   } catch (error) {
-    console.error("  GET appointment reports error:", error)
+    console.error("GET appointment reports error:", error)
     return NextResponse.json({ error: "Failed to fetch reports" }, { status: 500 })
   }
 }
@@ -72,7 +84,17 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { appointmentId, patientId, procedures, findings, notes, nextVisit, followUpDetails } = body
+    const {
+      appointmentId,
+      patientId,
+      procedures,
+      findings,
+      notes,
+      nextVisitDate,
+      nextVisitTime,
+      followUpDetails,
+      signature,
+    } = body
 
     if (!appointmentId || !String(appointmentId).trim()) {
       return NextResponse.json({ error: "Appointment ID is required" }, { status: 400 })
@@ -132,39 +154,145 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Appointment not found" }, { status: 404 })
     }
 
+    // Multi-report logic - determine doctor role and check permissions
+    let doctorRole = "original"
+    let referralId = null
+    let previousReportId = null
+
+    // Check if doctor already created a report for this appointment
+    const existingReport = await AppointmentReport.findOne({
+      appointmentId: appointmentId,
+      doctorId: payload.userId,
+    })
+
+    if (existingReport) {
+      return NextResponse.json(
+        {
+          error: "You have already created a report for this appointment. One report per doctor maximum.",
+          details: "You cannot create another report for the same appointment.",
+        },
+        { status: 403 },
+      )
+    }
+
+    // Original doctor creating report after referral back
+    // CRITICAL RULE: Only if they didn't create one before
+    if (appointmentExists.status === "refer_back") {
+      const originalReportBeforeReferral = await AppointmentReport.findOne({
+        appointmentId: appointmentId,
+        doctorId: payload.userId,
+        doctorRole: "original",
+      })
+
+      if (originalReportBeforeReferral) {
+        return NextResponse.json(
+          {
+            error:
+              "You cannot create another report after referral back. You already created a report before referring this case.",
+            details: "Only one report per doctor is allowed.",
+          },
+          { status: 403 },
+        )
+      }
+
+      // Original doctor can create now since they didn't create before
+      doctorRole = "original"
+      referralId = null
+    }
+    // Referred doctor creating report
+    else if (appointmentExists.isReferred && String(appointmentExists.doctorId) === String(payload.userId)) {
+      doctorRole = "referred"
+      referralId = appointmentExists.currentReferralId
+
+      // Find the original doctor's report to reference
+      const originalReport = await AppointmentReport.findOne({
+        appointmentId: appointmentId,
+        doctorRole: "original",
+      }).sort({ createdAt: -1 })
+
+      if (originalReport) {
+        previousReportId = originalReport._id
+      }
+    }
+    // Original doctor creating first report
+    else if (String(appointmentExists.originalDoctorId || appointmentExists.doctorId) === String(payload.userId)) {
+      doctorRole = "original"
+      referralId = null
+    } else {
+      return NextResponse.json(
+        { error: "You are not authorized to create a report for this appointment" },
+        { status: 403 },
+      )
+    }
+
+    let nextVisitDateTime = null
+    if (nextVisitDate && nextVisitDate.trim() && nextVisitTime && nextVisitTime.trim()) {
+      try {
+        const combinedDateTime = `${nextVisitDate}T${nextVisitTime}:00`
+        nextVisitDateTime = new Date(combinedDateTime)
+      } catch (error) {
+        console.error("Error parsing next visit datetime:", error)
+        nextVisitDateTime = new Date(nextVisitDate)
+      }
+    } else if (nextVisitDate && nextVisitDate.trim()) {
+      nextVisitDateTime = new Date(nextVisitDate)
+    }
+
     const reportData = {
       appointmentId: String(appointmentId).trim(),
       patientId: String(patientId).trim(),
       doctorId: payload.userId,
+      doctorName: doctorExists.name,
       procedures: proceduresArray,
       findings: String(findings).trim(),
       notes: String(notes).trim(),
-      nextVisit: nextVisit ? new Date(nextVisit) : null,
+      nextVisitDate: nextVisitDate ? nextVisitDate : null,
+      nextVisitTime: nextVisitTime ? nextVisitTime : null,
       followUpDetails: followUpDetails ? String(followUpDetails).trim() : "",
+      signature: signature || null,
+      doctorRole: doctorRole,
+      referralId: referralId,
+      previousReportId: previousReportId,
+      reportStatus: "submitted",
     }
 
-    console.log("  Creating report with data:", reportData)
+    console.log("[v0] Creating report with multi-report data:", reportData)
 
     const report = await AppointmentReport.create(reportData)
 
     if (!report) {
-      console.error("  Report creation returned null")
+      console.error("[v0] Report creation returned null")
       return NextResponse.json({ error: "Failed to create report in database" }, { status: 500 })
     }
 
     const populatedReport = await AppointmentReport.findById(report._id)
       .populate("patientId", "name")
       .populate("doctorId", "name specialty")
+      .populate("appointmentId", "date time type")
 
-    console.log("  Report created successfully:", populatedReport)
+    const reportResponse: any = populatedReport?.toObject() || {}
+    if (report.previousReportId) {
+      const prevReport = await AppointmentReport.findById(report.previousReportId).select(
+        "findings notes doctorName doctorRole createdAt",
+      )
+      reportResponse.previousReport = prevReport ? prevReport.toObject() : null
+    }
+
+    console.log("[v0] Report created successfully:", reportResponse)
 
     const patientData = await Patient.findById(patientId)
     if (patientData && patientData.email) {
-      console.log("  Sending treatment report email to patient:", patientData.email)
+      console.log("[v0] Sending treatment report email to patient:", patientData.email)
       const { sendTreatmentReportEmail } = await import("@/lib/nodemailer-service")
 
       const procedureNames = proceduresArray.map((p) => p.name)
-      const nextVisitDateFormatted = nextVisit ? new Date(nextVisit).toLocaleDateString() : undefined
+
+      let nextVisitFormatted = undefined
+      if (nextVisitDateTime) {
+        const dateStr = nextVisitDateTime.toLocaleDateString()
+        const timeStr = nextVisitTime ? ` at ${nextVisitTime}` : ""
+        nextVisitFormatted = `${dateStr}${timeStr}`
+      }
 
       const emailResult = await sendTreatmentReportEmail(
         patientData.email,
@@ -172,64 +300,21 @@ export async function POST(request: NextRequest) {
         doctorExists.name,
         procedureNames,
         findings,
-        nextVisitDateFormatted,
+        nextVisitFormatted,
       )
 
       if (!emailResult.success) {
-        console.warn("  Treatment report email failed:", emailResult.error)
+        console.warn("[v0] Treatment report email failed:", emailResult.error)
       } else {
-        console.log("  Treatment report email sent successfully:", emailResult.messageId)
+        console.log("[v0] Treatment report email sent successfully:", emailResult.messageId)
       }
     } else {
-      console.warn("  Patient email not found — Treatment report email skipped")
+      console.warn("[v0] Patient email not found — Treatment report email skipped")
     }
 
-    // if (patientData?.phone) {
-    //   console.log("  Scheduling WhatsApp notification for 1 minute after report creation")
-
-    //     try {
-    //       console.log("  Sending WhatsApp medical report link to patient:", patientData.phone)
-    //       const { sendMedicalReportLink } = await import("@/lib/whatsapp-service")
-    //       const { encryptData } = await import("@/lib/encryption")
-
-    //       // Generate secure token for the report
-    //       const token = encryptData(JSON.stringify({ appointmentId, patientId }))
-    //       const encodedToken = encodeURIComponent(token)
-    //       const reportLink = `${process.env.NEXT_PUBLIC_APP_URL}/public/reports/${encodedToken}`
-
-    //       const appointmentData = await Appointment.findById(appointmentId)
-    //       const appointmentDate = appointmentData?.date
-    //         ? new Date(appointmentData.date).toLocaleDateString("en-US", {
-    //             year: "numeric",
-    //             month: "short",
-    //             day: "numeric",
-    //           })
-    //         : "N/A"
-    //       const appointmentTime = appointmentData?.time || "N/A"
-
-    //       const whatsappResult = await sendMedicalReportLink(
-    //         patientData.phone,
-    //         patientData.name,
-    //         appointmentDate,
-    //         appointmentTime,
-    //         doctorExists.name,
-    //         reportLink,
-    //       )
-
-    //       if (whatsappResult.success) {
-    //         console.log("  WhatsApp medical report link sent successfully:", whatsappResult.messageId)
-    //       } else {
-    //         console.warn("  WhatsApp medical report link failed:", whatsappResult.error)
-    //       }
-    //     } catch (err) {
-    //       console.error("  Error sending WhatsApp notification:", err)
-    //     }
-    //  // 60000 milliseconds = 1 minute
-    // }
-
-    return NextResponse.json({ success: true, report: populatedReport })
+    return NextResponse.json({ success: true, report: reportResponse })
   } catch (error) {
-    console.error("  POST appointment report error:", error)
+    console.error("[v0] POST appointment report error:", error)
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     return NextResponse.json({ error: `Failed to create report: ${errorMessage}` }, { status: 500 })
   }

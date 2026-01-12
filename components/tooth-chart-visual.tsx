@@ -11,10 +11,23 @@ interface ToothChartProps {
   teeth: Record<number, ToothStatus>
   onToothClick: (toothNumber: number) => void
   readOnly?: boolean
+  onToothStatusChange?: (toothNumber: number, newStatus: string) => void
 }
 
-export function ToothChartVisual({ teeth, onToothClick, readOnly = false }: ToothChartProps) {
+const TREATMENT_OPTIONS = [
+  { value: "healthy", label: "Healthy" },
+  { value: "cavity", label: "Cavity" },
+  { value: "filling", label: "Filling" },
+  { value: "root_canal", label: "Root Canal" },
+  { value: "crown", label: "Crown" },
+  { value: "implant", label: "Implant" },
+  { value: "treated", label: "Treated" },
+  { value: "missing", label: "Missing" },
+]
+
+export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToothStatusChange }: ToothChartProps) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
+  const [openDropdown, setOpenDropdown] = useState<number | null>(null)
 
   // Image mapping
   const getToothImageNumber = (toothNumber: number): number => {
@@ -87,13 +100,13 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false }: Toot
   const getToothIndicator = (status: string) => {
     switch (status) {
       case "filling":
-        return ""
+        return "▓"
       case "implant":
-        return ""
+        return "⊙"
       case "missing":
-        return ""
+        return "✕"
       case "cavity":
-        return ""
+        return "●"
       default:
         return ""
     }
@@ -171,48 +184,87 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false }: Toot
     >
       {toothNumbers.map((toothNum) => {
         const toothStatus = teeth[toothNum]?.status || "healthy"
+        const toothNotes = teeth[toothNum]?.notes || ""
         const statusDisplayName = getStatusDisplayName(toothStatus)
         const indicator = getToothIndicator(toothStatus)
+        const isTreated = toothStatus !== "healthy" && toothStatus !== "missing"
 
         return (
-          <button
-            key={toothNum}
-            onClick={() => {
-              setSelectedTooth(toothNum)
-              !readOnly && onToothClick(toothNum)
-            }}
-            disabled={readOnly}
-            className={`relative h-16 sm:h-20 md:h-28 w-full rounded-lg flex flex-col items-center justify-center transition-all overflow-visible border-2 sm:border-4 group
-              ${readOnly ? "cursor-default" : "hover:shadow-md cursor-pointer hover:scale-105"}
-              ${selectedTooth === toothNum ? "ring-2 ring-offset-2 ring-primary" : ""}
-            `}
-            style={{
-              borderColor: getToothColor(toothStatus),
-            }}
-          >
-            {/* Tooth image */}
-            <div className="w-full h-full">
-              <ToothImage toothNumber={toothNum} status={toothStatus} />
+          <div key={toothNum} className="relative flex flex-col items-center">
+            <div className="relative w-full">
+              <button
+                onClick={() => {
+                  setSelectedTooth(toothNum)
+                  setOpenDropdown(openDropdown === toothNum ? null : toothNum)
+                }}
+                disabled={readOnly}
+                className={`relative h-16 sm:h-20 md:h-28 w-full rounded-lg flex flex-col items-center justify-center transition-all overflow-visible border-2 sm:border-4 group
+                  ${readOnly ? "cursor-default" : "hover:shadow-md cursor-pointer hover:scale-105"}
+                  ${selectedTooth === toothNum ? "ring-2 ring-offset-2 ring-primary" : ""}
+                `}
+                style={{
+                  borderColor: getToothColor(toothStatus),
+                }}
+              >
+                {/* Tooth image */}
+                <div className="w-full h-full">
+                  <ToothImage toothNumber={toothNum} status={toothStatus} />
+                </div>
+
+                {indicator && (
+                  <div
+                    className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3 sm:w-4 md:w-5 h-3 sm:h-4 md:h-5 rounded-full flex items-center justify-center text-white text-[10px] sm:text-[8px] font-bold shadow-md"
+                    style={{ backgroundColor: getToothColor(toothStatus) }}
+                  >
+                    {indicator}
+                  </div>
+                )}
+
+                {/* Tooltip - responsive positioning */}
+                <div className="hidden sm:block absolute -top-12 sm:-top-14 md:-top-16 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white border border-gray-300 rounded-md shadow-md px-2 py-1 text-center z-50 min-w-[120px]">
+                  <p className="text-red-600 font-semibold text-xs">{toothNum}</p>
+                  <p className="text-gray-700 text-[10px]">{getToothName(toothNum)}</p>
+                  <p
+                    className="text-gray-600 text-[10px] font-medium mt-1"
+                    style={{ color: getToothColor(toothStatus) }}
+                  >
+                    Status: {statusDisplayName}
+                  </p>
+                  {toothNotes && <p className="text-gray-600 text-[10px] mt-1">Notes: {toothNotes}</p>}
+                </div>
+              </button>
+
+              {!readOnly && openDropdown === toothNum && (
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[100px]">
+                  {TREATMENT_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        onToothStatusChange?.(toothNum, option.value)
+                        setOpenDropdown(null)
+                      }}
+                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
+                        toothStatus === option.value
+                          ? "bg-primary text-primary-foreground font-semibold"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {indicator && (
+            {isTreated && (
               <div
-                className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 w-3 sm:w-4 md:w-5 h-3 sm:h-4 md:h-5 rounded-full flex items-center justify-center text-white text-[8px] sm:text-xs font-bold shadow-md"
+                className="text-white text-[10px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded mt-1 text-center whitespace-nowrap max-w-full"
                 style={{ backgroundColor: getToothColor(toothStatus) }}
               >
-                {indicator}
+                {statusDisplayName}
               </div>
             )}
-
-            {/* Tooltip - responsive positioning */}
-            <div className="hidden sm:block absolute -top-12 sm:-top-14 md:-top-16 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white border border-gray-300 rounded-md shadow-md px-2 py-1 text-center z-50 min-w-[120px]">
-              <p className="text-red-600 font-semibold text-xs">{toothNum}</p>
-              <p className="text-gray-700 text-[10px]">{getToothName(toothNum)}</p>
-              <p className="text-gray-600 text-[10px] font-medium mt-1" style={{ color: getToothColor(toothStatus) }}>
-                Status: {statusDisplayName}
-              </p>
-            </div>
-          </button>
+          </div>
         )
       })}
     </div>
@@ -286,7 +338,7 @@ function LegendItem({
         style={{ borderColor: color, backgroundColor: "#f8fafc" }}
       >
         {indicator && (
-          <span className="text-xs font-bold" style={{ color }}>
+          <span className="text-[12px] font-bold" style={{ color }}>
             {indicator}
           </span>
         )}

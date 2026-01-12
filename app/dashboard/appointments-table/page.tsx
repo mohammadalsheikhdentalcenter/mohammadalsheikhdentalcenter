@@ -7,15 +7,141 @@ import { Sidebar } from "@/components/sidebar"
 import { useAuth } from "@/components/auth-context"
 import { useState, useEffect, useRef } from "react"
 import { toast } from "react-hot-toast"
-import { Plus, Loader2, FileText, CheckCircle, X, Edit, Trash2, Eye } from "lucide-react"
+import { Plus, FileText, CheckCircle, X, Edit, Trash2, Eye, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, CalendarDays, User, Stethoscope, Clock, AlertCircle } from "lucide-react"
 import { AppointmentActionModal } from "@/components/appointment-action-modal"
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal"
 import { SearchableDropdown } from "@/components/searchable-dropdown"
 import { useRouter } from "next/navigation"
 import { StatCard } from "@/components/appointment-stats-card"
-import { Calendar, Clock, CheckCircle2, XCircle } from "lucide-react"
+import { CheckCircle2, XCircle } from "lucide-react"
 import { PatientReferralModal } from "@/components/patient-referral-modal"
 import { ReferAppointmentModal } from "@/components/refer-appointment-modal"
+
+// Appointment Permission Logic Functions
+function useAppointmentPermissions(user, currentUserId) {
+  const canCloseOrCancelAppointment = (appointment) => {
+    if (user?.role !== "doctor") return false
+
+    const isOriginalDoctor = String(appointment.originalDoctorId) === String(currentUserId)
+    const isCurrentDoctor = String(appointment.doctorId) === String(currentUserId)
+    const isReferred = appointment.isReferred
+    const isReferBack = appointment.status === "refer_back"
+
+    // When appointment is in refer_back status, only original doctor can manage it
+    if (isReferBack) {
+      return isOriginalDoctor
+    }
+
+    // Original doctor can close/cancel their own non-referred appointments
+    if (isOriginalDoctor && !isReferred) return true
+
+    // Current doctor can close/cancel their assigned appointments (non-referred)
+    if (isCurrentDoctor && !isReferred) return true
+
+    // Referred doctors CANNOT close/cancel appointments
+    // Only original doctor can manage referred appointments (after refer_back)
+
+    return false
+  }
+
+  const canCreateOrViewReport = (appointment) => {
+    if (user?.role !== "doctor") return false
+
+    const currentUserId = user?.userId || user?.id
+    const isOriginalDoctor = String(appointment.originalDoctorId) === String(currentUserId)
+    const isCurrentDoctor = String(appointment.doctorId) === String(currentUserId)
+    const isReferred = appointment.isReferred
+    const isReferBack = appointment.status === "refer_back"
+
+    // When appointment is in refer_back status, only original doctor can create/view reports
+    if (isReferBack) {
+      return isOriginalDoctor
+    }
+
+    // Original doctor cannot create report when appointment is with another doctor
+    if (isReferred && !isCurrentDoctor && !isReferBack) return false
+
+    // Original doctor can create report when appointment is referred back
+    if (isOriginalDoctor && isReferBack) return true
+
+    // Current doctor can always create report
+    if (isCurrentDoctor) return true
+
+    return false
+  }
+
+  const canReferAppointment = (appointment) => {
+    if (user?.role !== "doctor") return false
+
+    const currentUserId = user?.userId || user?.id
+    const isCurrentDoctor =
+      String(appointment.doctorId) === String(currentUserId)
+    const isOriginalDoctor =
+      String(appointment.originalDoctorId) === String(currentUserId)
+    const isReferred = appointment.isReferred
+    const isReferBack = appointment.status === "refer_back"
+
+    // When appointment is in refer_back status, original doctor can refer to another doctor
+    if (isReferBack && isOriginalDoctor) return true
+    
+    if (isReferBack && !isOriginalDoctor) return false
+
+    // Can refer if: current doctor, not already referred, not cancelled/completed/closed
+    return (
+      isCurrentDoctor &&
+      !isReferred &&
+      appointment.status !== "completed" &&
+      appointment.status !== "closed" &&
+      appointment.status !== "cancelled"
+    )
+  }
+
+  const canEditAppointment = (appointment) => {
+    const currentUserId = user?.userId || user?.id
+    if (appointment.status === "cancelled" || appointment.status === "closed" || appointment.status === "completed") {
+      return false
+    }
+
+    const isReferBack = appointment.status === "refer_back"
+    const isOriginalDoctor = String(appointment.originalDoctorId) === String(currentUserId)
+    const isCurrentDoctor = String(appointment.doctorId) === String(currentUserId)
+    const isReferred = appointment.isReferred
+    const isCreator = String(appointment.createdBy) === String(currentUserId)
+
+    // When appointment is in refer_back status, only original doctor can edit
+    if (isReferBack) {
+      return isOriginalDoctor
+    }
+
+    // Admin/receptionist can always edit
+    if (user?.role !== "doctor") return true
+
+    // If appointment is referred AND NOT in refer_back status, hide edit button
+    if (isReferred && !isReferBack) {
+      return false // Hide edit button during referral process
+    }
+
+    // Doctor who created the appointment should be able to edit it
+    // This handles cases where originalDoctorId is null but doctor created the appointment
+    if (isCreator && !isReferred) {
+      return true
+    }
+
+    // Original doctor can edit their appointments before referral
+    if (isOriginalDoctor && !isReferred) {
+      return true
+    }
+
+    return false
+  }
+
+  return {
+    canCloseOrCancelAppointment,
+    canCreateOrViewReport,
+    canReferAppointment,
+    canEditAppointment,
+  }
+}
 
 // Separate ActionDropdown component
 function ActionDropdown({
@@ -32,6 +158,7 @@ function ActionDropdown({
   onCancel,
   canCloseAppointment,
   onReferAppointment,
+  permissions,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
@@ -55,10 +182,9 @@ function ActionDropdown({
     const updatePosition = () => {
       if (buttonRef.current && isOpen) {
         const rect = buttonRef.current.getBoundingClientRect()
-        // Position ABOVE the button instead of below
         setPosition({
-          top: rect.top + window.scrollY - 100, // 10px above the button
-          left: rect.left + window.scrollX - 200, // Adjust to left side
+          top: rect.top + window.scrollY - 100,
+          left: rect.left + window.scrollX - 200,
         })
       }
     }
@@ -82,10 +208,9 @@ function ActionDropdown({
 
     if (!isOpen) {
       const rect = e.currentTarget.getBoundingClientRect()
-      // Position ABOVE the button
       setPosition({
-        top: rect.top + window.scrollY - 10, // 10px above the button
-        left: rect.left + window.scrollX - 180, // Move to left side to avoid right edge cutoff
+        top: rect.top + window.scrollY - 10,
+        left: rect.left + window.scrollX - 180,
       })
     }
 
@@ -100,13 +225,11 @@ function ActionDropdown({
   const getActionItems = () => {
     const items = []
 
-    const isOriginalDoctorWithReferral =
-      userRole === "doctor" && appointment.originalDoctorId === userId && appointment.isReferred === true
+    const isAppointmentTerminal =
+      appointment.status === "completed" || appointment.status === "closed" || appointment.status === "cancelled"
 
-    const isReferredDoctor = userRole === "doctor" && appointment.doctorId === userId && appointment.isReferred === true
-
-    // Edit action
-    if (appointment.status !== "completed" && appointment.status !== "closed" && userRole !== "doctor") {
+    // Edit action - use permission logic from calendar page
+    if (!isAppointmentTerminal && permissions.canEditAppointment(appointment)) {
       items.push({
         label: "Edit",
         icon: <Edit className="w-4 h-4" />,
@@ -127,24 +250,18 @@ function ActionDropdown({
       })
     }
 
-    // View Details action
-    if (userRole !== "doctor") {
-      items.push({
-        label: "View Details",
-        icon: <Eye className="w-4 h-4" />,
-        onClick: () => (window.location.href = `/dashboard/appointments/${appointmentId}`),
-        disabled: loading.appointments,
-        className: "text-blue-600",
-      })
-    }
-    // Doctor-specific actions
-    if (
-      userRole === "doctor" &&
-      appointment.status !== "cancelled" &&
-      appointment.status !== "completed" &&
-      appointment.status !== "closed"
-    ) {
-      if (!isOriginalDoctorWithReferral) {
+    // View Details action - For all users
+    items.push({
+      label: "View Details",
+      icon: <Eye className="w-4 h-4" />,
+      onClick: () => (window.location.href = `/dashboard/appointments/${appointmentId}`),
+      disabled: loading.appointments,
+      className: "text-blue-600",
+    })
+
+    if (userRole === "doctor" && !isAppointmentTerminal) {
+      // Create/View Report action - using permission logic
+      if (permissions.canCreateOrViewReport(appointment)) {
         items.push({
           label: hasReport ? "View Report" : "Create Report",
           icon: <FileText className="w-4 h-4" />,
@@ -154,7 +271,8 @@ function ActionDropdown({
         })
       }
 
-      if (!appointment.isReferred) {
+      // Refer to Doctor action - using permission logic
+      if (permissions.canReferAppointment(appointment)) {
         items.push({
           label: "Refer to Doctor",
           icon: <FileText className="w-4 h-4" />,
@@ -164,7 +282,8 @@ function ActionDropdown({
         })
       }
 
-      if (!isOriginalDoctorWithReferral && !isReferredDoctor) {
+      // Close Appointment action - using permission logic
+      if (permissions.canCloseOrCancelAppointment(appointment)) {
         items.push({
           label: "Close Appointment",
           icon: <CheckCircle className="w-4 h-4" />,
@@ -174,7 +293,8 @@ function ActionDropdown({
         })
       }
 
-      if (!isOriginalDoctorWithReferral && !isReferredDoctor) {
+      // Cancel Appointment action - using permission logic
+      if (permissions.canCloseOrCancelAppointment(appointment)) {
         items.push({
           label: "Cancel Appointment",
           icon: <X className="w-4 h-4" />,
@@ -196,10 +316,10 @@ function ActionDropdown({
         <button
           ref={buttonRef}
           onClick={toggleDropdown}
-          className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors bg-white"
+          className="flex items-center justify-center w-8 h-8 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors bg-white shadow-xs hover:shadow-sm"
           title="Actions"
         >
-          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -210,7 +330,6 @@ function ActionDropdown({
         </button>
       </div>
 
-      {/* Portal the dropdown to body - positioned ABOVE the button */}
       {isOpen &&
         typeof document !== "undefined" &&
         createPortal(
@@ -222,15 +341,15 @@ function ActionDropdown({
               left: `${position.left}px`,
               zIndex: 9999,
             }}
-            className="w-56 bg-white border border-gray-300 rounded-lg shadow-2xl py-2"
+            className="w-56 bg-white border border-gray-200 rounded-lg shadow-lg py-1"
           >
             {actionItems.map((item, index) => (
               <button
                 key={index}
                 onClick={() => !item.disabled && handleAction(item.onClick)}
                 disabled={item.disabled}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                  item.disabled ? "opacity-50 cursor-not-allowed text-gray-400" : `${item.className} hover:bg-blue-50`
+                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-gray-50 ${
+                  item.disabled ? "opacity-50 cursor-not-allowed text-gray-400" : item.className
                 }`}
               >
                 {item.icon}
@@ -241,6 +360,63 @@ function ActionDropdown({
           document.body,
         )}
     </>
+  )
+}
+
+// Loading Skeleton Component
+function TableLoadingSkeleton() {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="p-4 border-b border-gray-200 bg-gray-50">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+          <div className="relative flex-1 max-w-md">
+            <div className="w-full h-10 bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="w-24 h-10 bg-gray-200 rounded-lg animate-pulse"></div>
+            <div className="w-32 h-10 bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              {Array.from({ length: 7 }).map((_, i) => (
+                <th key={i} className="text-left p-4">
+                  <div className="h-4 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 5 }).map((_, rowIndex) => (
+              <tr key={rowIndex} className="border-b border-gray-100">
+                {Array.from({ length: 7 }).map((_, cellIndex) => (
+                  <td key={cellIndex} className="p-4">
+                    <div className="h-4 bg-gray-100 rounded animate-pulse w-full"></div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-center py-8">
+          <div className="flex flex-col items-center justify-center gap-3">
+            <div className="flex justify-center items-center gap-2">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></div>
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></div>
+            </div>
+            <span className="text-gray-500 text-sm">Loading appointments...</span>
+          </div>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -259,19 +435,29 @@ function AppointmentsTableView({
   onCancel,
   canCloseAppointment,
   onReferAppointment,
+  searchQuery,
+  onSearchChange,
+  currentPage,
+  totalPages,
+  itemsPerPage,
+  onPageChange,
+  onItemsPerPageChange,
+  permissions,
 }) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "bg-green-100 text-green-800"
+        return "bg-emerald-50 text-emerald-700 border border-emerald-100"
       case "cancelled":
-        return "bg-red-100 text-red-800"
+        return "bg-red-50 text-red-700 border border-red-100"
       case "confirmed":
-        return "bg-blue-100 text-blue-800"
+        return "bg-blue-50 text-blue-700 border border-blue-100"
       case "closed":
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-700 border border-gray-200"
+      case "refer_back":
+        return "bg-amber-50 text-amber-700 border border-amber-100"
       default:
-        return "bg-yellow-100 text-yellow-800"
+        return "bg-yellow-50 text-yellow-700 border border-yellow-100"
     }
   }
 
@@ -293,66 +479,180 @@ function AppointmentsTableView({
         })
       : appointments
 
+  // Apply search filter
+  const searchedAppointments = searchQuery
+    ? filteredAppointments.filter(
+        (apt) =>
+          apt.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.doctorName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.status?.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : filteredAppointments
+
+  // Apply pagination
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedAppointments = searchedAppointments.slice(startIndex, endIndex)
+
+  if (loading.appointments) {
+    return <TableLoadingSkeleton />
+  }
+
   return (
-    <div className="bg-card rounded-lg shadow-md border border-border overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-200">
+      <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search appointments by patient, doctor, type, room, or status..."
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm transition-all duration-200"
+            />
+          </div>
+          <div className="flex items-center gap-4 text-sm text-gray-600">
+            <span className="whitespace-nowrap bg-white px-3 py-1.5 rounded-lg border border-gray-200">
+              <span className="font-medium">{searchedAppointments.length}</span> appointments
+            </span>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white transition-all duration-200"
+            >
+              <option value={10}>10 per page</option>
+              <option value={25}>25 per page</option>
+              <option value={50}>50 per page</option>
+              <option value={100}>100 per page</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-border bg-muted/50">
-              <th className="text-left p-4 font-medium text-foreground">Patient</th>
-              <th className="text-left p-4 font-medium text-foreground">Doctor</th>
-              <th className="text-left p-4 font-medium text-foreground">Date & Time</th>
-              <th className="text-left p-4 font-medium text-foreground">Type</th>
-              <th className="text-left p-4 font-medium text-foreground">Room</th>
-              <th className="text-left p-4 font-medium text-foreground">Status</th>
-              <th className="text-left p-4 font-medium text-foreground">Actions</th>
+            <tr className="bg-gray-50/50 border-b border-gray-200">
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Patient</th>
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Doctor</th>
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Date & Time</th>
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Type</th>
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Room</th>
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Status</th>
+              <th className="text-left p-4 font-medium text-gray-600 text-xs uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filteredAppointments.map((appointment) => {
+            {paginatedAppointments.map((appointment) => {
               const hasReport = appointmentReports[appointment._id || appointment.id]
               const appointmentId = appointment._id || appointment.id
+              const currentUserId = userId
 
               return (
-                <tr key={appointmentId} className="border-b border-border hover:bg-muted/50">
-                  <td className="p-4 text-foreground">{appointment.patientName}</td>
-                  <td className="p-4 text-foreground">{appointment.doctorName}</td>
-                  <td className="p-4 text-foreground">
-                    <div>{formatDate(appointment.date)}</div>
-                    <div className="text-sm text-muted-foreground">{appointment.time}</div>
+                <tr
+                  key={appointmentId}
+                  className="border-b border-gray-100 hover:bg-gray-50/50 transition-colors duration-150 group"
+                >
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+                        <User className="w-4 h-4 text-blue-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900 text-sm">{appointment.patientName}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center">
+                        <Stethoscope className="w-4 h-4 text-purple-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900 text-sm">{appointment.doctorName}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center">
+                        <CalendarDays className="w-4 h-4 text-emerald-500" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-900 text-sm">{formatDate(appointment.date)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {appointment.time}
+                        </div>
+                      </div>
+                    </div>
                     {appointment.isReferred && (
-                      <div className="mt-1">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                          {appointment.originalDoctorId === userId
-                            ? `Referred to ${appointment.doctorName}`
-                            : "Referred In"}
+                      <div className="mt-2">
+                        <span
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor("refer_back")}`}
+                        >
+                          {appointment.isReferred &&
+                            appointment.status !== "completed" &&
+                            appointment.status !== "closed" &&
+                            appointment.status !== "cancelled" && (
+                              <span className="text-xs">
+                                {appointment.status === "refer_back"
+                                  ? ""
+                                  : String(appointment.originalDoctorId) === String(currentUserId)
+                                    ? `Referred to ${appointment.doctorName}`
+                                    : "Referred In"}
+                              </span>
+                            )}
                         </span>
                       </div>
                     )}
-                  </td>
-                  <td className="p-4 text-foreground">{appointment.type}</td>
-                  <td className="p-4 text-foreground">{appointment.roomNumber}</td>
-                  <td className="p-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}
-                    >
-                      {appointment.status}
-                    </span>
-                    {userRole === "doctor" && appointment.status !== "cancelled" && appointment.status !== "closed" && (
+                    {/* {appointment.status === "refer_back" && (
                       <div className="mt-1">
-                        {hasReport ? (
-                          <span className="text-xs text-green-600 flex items-center gap-1">
-                            <CheckCircle className="w-3 h-3" />
-                            Report ready
-                          </span>
-                        ) : (
-                          <span className="text-xs text-amber-600 flex items-center gap-1">
-                            <FileText className="w-3 h-3" />
-                            No report
-                          </span>
-                        )}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor("refer_back")}`}>
+                          Refer Back Pending
+                        </span>
                       </div>
-                    )}
+                    )} */}
+                  </td>
+                  <td className="p-4">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                      {appointment.type}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
+                      {appointment.roomNumber}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex flex-col gap-2">
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}
+                      >
+                        {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                      </span>
+                      {userRole === "doctor" &&
+                        appointment.status !== "cancelled" &&
+                        appointment.status !== "closed" &&
+                        appointment.status !== "completed" && (
+                          <div className="mt-1">
+                            {hasReport ? (
+                              <span className="text-xs text-emerald-600 flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3" />
+                                Report ready
+                              </span>
+                            ) : (
+                              <span className="text-xs text-amber-600 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                No Report
+                              </span>
+                            )}
+                          </div>
+                        )}
+                    </div>
                   </td>
                   <td className="p-4">
                     <ActionDropdown
@@ -370,6 +670,7 @@ function AppointmentsTableView({
                       onCancel={onCancel}
                       canCloseAppointment={canCloseAppointment}
                       onReferAppointment={onReferAppointment}
+                      permissions={permissions}
                     />
                   </td>
                 </tr>
@@ -378,10 +679,109 @@ function AppointmentsTableView({
           </tbody>
         </table>
 
-        {filteredAppointments.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground">No appointments found</div>
+        {paginatedAppointments.length === 0 && (
+          <div className="py-12 text-center">
+            <div className="text-gray-300 mb-3">
+              <Search className="w-12 h-12 mx-auto" />
+            </div>
+            <p className="text-gray-500 font-medium text-sm">No appointments found</p>
+            <p className="text-gray-400 text-xs mt-1">
+              {searchQuery ? "Try adjusting your search terms" : "No appointments scheduled yet"}
+            </p>
+          </div>
         )}
       </div>
+
+      {/* Pagination */}
+      {searchedAppointments.length > 0 && (
+        <div className="px-6 py-4 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="text-sm text-gray-600">
+              Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
+              <span className="font-medium">{Math.min(endIndex, searchedAppointments.length)}</span> of{" "}
+              <span className="font-medium">{searchedAppointments.length}</span> entries
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => onPageChange(1)}
+                disabled={currentPage === 1}
+                className={`p-2 rounded-lg border transition-all duration-200 ${
+                  currentPage === 1
+                    ? "border-gray-200 text-gray-400 cursor-not-allowed"
+                    : "border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 hover:shadow-xs"
+                }`}
+              >
+                <ChevronsLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onPageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className={`p-2 rounded-lg border transition-all duration-200 ${
+                  currentPage === 1
+                    ? "border-gray-200 text-gray-400 cursor-not-allowed"
+                    : "border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 hover:shadow-xs"
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-1 mx-2">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum
+                  if (totalPages <= 5) {
+                    pageNum = i + 1
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i
+                  } else {
+                    pageNum = currentPage - 2 + i
+                  }
+
+                  if (pageNum < 1 || pageNum > totalPages) return null
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => onPageChange(pageNum)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        currentPage === pageNum
+                          ? "bg-blue-600 text-white border border-blue-600 shadow-xs"
+                          : "border border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 hover:shadow-xs"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <button
+                onClick={() => onPageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className={`p-2 rounded-lg border transition-all duration-200 ${
+                  currentPage === totalPages
+                    ? "border-gray-200 text-gray-400 cursor-not-allowed"
+                    : "border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 hover:shadow-xs"
+                }`}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onPageChange(totalPages)}
+                disabled={currentPage === totalPages}
+                className={`p-2 rounded-lg border transition-all duration-200 ${
+                  currentPage === totalPages
+                    ? "border-gray-200 text-gray-400 cursor-not-allowed"
+                    : "border-gray-300 text-gray-700 hover:bg-white hover:border-gray-400 hover:shadow-xs"
+                }`}
+              >
+                <ChevronsRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -424,7 +824,8 @@ export default function AppointmentsTablePage() {
     procedures: [],
     findings: "",
     notes: "",
-    nextVisit: "",
+    nextVisitDate: "",
+    nextVisitTime: "",
     followUpDetails: "",
   })
   const [patients, setPatients] = useState([])
@@ -441,42 +842,44 @@ export default function AppointmentsTablePage() {
     cancelAppointment: false,
     completeAppointment: false,
     createReport: false,
+    checkingReports: false,
   })
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [appointmentToDelete, setAppointmentToDelete] = useState<any>(null)
   const router = useRouter()
 
   const [showReferralModal, setShowReferralModal] = useState(false)
-
   const [showReferModal, setShowReferModal] = useState(false)
   const [selectedAppointmentForReferral, setSelectedAppointmentForReferral] = useState<any>(null)
 
+  // Search and pagination states
+  const [searchQuery, setSearchQuery] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(10)
+
+  const currentUserId = user?.userId || user?.id
+  const permissions = useAppointmentPermissions(user, currentUserId)
+
   const checkAppointmentReports = async () => {
+    setLoading((prev) => ({ ...prev, checkingReports: true }))
     try {
       const reportChecks: Record<string, boolean> = {}
 
-      // Check each appointment for a report
       for (const apt of appointments) {
-        const appointmentId = apt._id || apt.id
-        try {
-          const res = await fetch(`/api/appointment-reports?appointmentId=${appointmentId}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-          if (res.ok) {
-            const data = await res.json()
-            reportChecks[appointmentId] = data.reports && data.reports.length > 0
-          } else {
-            reportChecks[appointmentId] = false
-          }
-        } catch (error) {
-          console.error(`Failed to check report for appointment ${appointmentId}:`, error)
-          reportChecks[appointmentId] = false
+        const res = await fetch(`/api/appointment-reports?appointmentId=${apt._id || apt.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          reportChecks[apt._id || apt.id] = data.reports && data.reports.length > 0
         }
       }
 
       setAppointmentReports(reportChecks)
     } catch (error) {
       console.error("Failed to check appointment reports:", error)
+    } finally {
+      setLoading((prev) => ({ ...prev, checkingReports: false }))
     }
   }
 
@@ -487,11 +890,19 @@ export default function AppointmentsTablePage() {
       if (user?.role !== "doctor") {
         fetchDoctors()
       }
-      // Call checkAppointmentReports on initial load
-      fetchAppointmentReports()
-      checkAppointmentReports()
     }
   }, [token, user])
+
+  useEffect(() => {
+    if (appointments.length > 0 && user?.role === "doctor") {
+      checkAppointmentReports()
+    }
+  }, [appointments, user])
+
+  useEffect(() => {
+    // Reset to first page when search changes
+    setCurrentPage(1)
+  }, [searchQuery])
 
   const fetchAppointments = async () => {
     setLoading((prev) => ({ ...prev, appointments: true }))
@@ -544,24 +955,6 @@ export default function AppointmentsTablePage() {
       toast.error("Failed to fetch doctors")
     } finally {
       setLoading((prev) => ({ ...prev, doctors: false }))
-    }
-  }
-
-  const fetchAppointmentReports = async () => {
-    try {
-      const res = await fetch("/api/appointment-reports", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const reportsMap: Record<string, boolean> = {}
-        data.reports?.forEach((report: any) => {
-          reportsMap[report.appointmentId] = true
-        })
-        setAppointmentReports(reportsMap)
-      }
-    } catch (error) {
-      console.error("Failed to fetch appointment reports:", error)
     }
   }
 
@@ -619,7 +1012,8 @@ export default function AppointmentsTablePage() {
         setAppointments(appointments.filter((a) => a._id !== appointmentId && a.id !== appointmentId))
         toast.success("Appointment deleted successfully")
       } else {
-        toast.error("Failed to delete appointment")
+        const errorData = await res.json()
+        toast.error(errorData.error || "Failed to delete appointment")
       }
     } catch (error) {
       console.error("Failed to delete appointment:", error)
@@ -692,17 +1086,20 @@ export default function AppointmentsTablePage() {
   }
 
   const handleEditAppointment = (appointment: any) => {
-    if (user?.role === "doctor" && appointment.doctorId !== user.userId) {
-      toast.error("You can only edit your own appointments")
+    if (!permissions.canEditAppointment(appointment)) {
+      toast.error("You can only edit appointments you created")
       return
     }
 
     setEditingId(appointment._id || appointment.id)
+    const doctorId = user?.role === "doctor" ? user.userId : appointment.doctorId
+    const doctorName = user?.role === "doctor" ? user.name : appointment.doctorName
+
     setFormData({
       patientId: appointment.patientId,
       patientName: appointment.patientName,
-      doctorId: appointment.doctorId,
-      doctorName: appointment.doctorName,
+      doctorId: doctorId,
+      doctorName: doctorName,
       date: appointment.date,
       time: appointment.time,
       type: appointment.type,
@@ -719,7 +1116,6 @@ export default function AppointmentsTablePage() {
       errors.patientId = "Patient is required"
     }
 
-    // Only validate doctorId if user is not a doctor
     if (user?.role !== "doctor" && (!formData.doctorId || !String(formData.doctorId).trim())) {
       errors.doctorId = "Doctor is required"
     }
@@ -747,11 +1143,7 @@ export default function AppointmentsTablePage() {
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
-  useEffect(() => {
-    if (appointments.length > 0 && token) {
-      checkAppointmentReports()
-    }
-  }, [appointments, token])
+
   const handleAddAppointment = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -760,10 +1152,8 @@ export default function AppointmentsTablePage() {
       return
     }
 
-    const finalDoctorId = user?.role === "doctor" ? String(user?.id) : formData.doctorId
-    const finalDoctorName = user?.role === "doctor" ? user?.name : formData.doctorName
-
-    console.log("[v0] Doctor ID Debug - role:", user?.role, "id:", user?.id, "finalDoctorId:", finalDoctorId)
+    const finalDoctorId = user?.role === "doctor" ? String(user?.id) : String(formData.doctorId)
+    const finalDoctorName = user?.role === "doctor" ? String(user?.name) : String(formData.doctorName)
 
     if (user?.role !== "doctor" && (!finalDoctorId || !String(finalDoctorId).trim())) {
       toast.error("Doctor is required")
@@ -786,6 +1176,7 @@ export default function AppointmentsTablePage() {
       type: formData.type,
       roomNumber: formData.roomNumber,
       duration: formData.duration || 30,
+      createdBy: user?.id,
     }
 
     const timeConflict = appointments.some((apt) => {
@@ -796,7 +1187,7 @@ export default function AppointmentsTablePage() {
         return false
       }
 
-      if (apt.doctorId !== submissionData.doctorId || apt.date !== formData.date) {
+      if (apt.doctorId !== submissionData.doctorId || apt.date !== submissionData.date) {
         return false
       }
 
@@ -804,8 +1195,8 @@ export default function AppointmentsTablePage() {
       const aptDuration = apt.duration || 30
       const aptEndMin = aptStartMin + aptDuration
 
-      const newStartMin = timeToMinutes(formData.time)
-      const newDuration = formData.duration || 30
+      const newStartMin = timeToMinutes(submissionData.time)
+      const newDuration = submissionData.duration || 30
       const newEndMin = newStartMin + newDuration
 
       return newStartMin < aptEndMin && aptStartMin < newEndMin
@@ -819,7 +1210,7 @@ export default function AppointmentsTablePage() {
         if (apt.status === "cancelled" || apt.status === "closed" || apt.status === "completed") {
           return false
         }
-        if (apt.doctorId !== submissionData.doctorId || apt.date !== formData.date) {
+        if (apt.doctorId !== submissionData.doctorId || apt.date !== submissionData.date) {
           return false
         }
 
@@ -827,8 +1218,8 @@ export default function AppointmentsTablePage() {
         const aptDuration = apt.duration || 30
         const aptEndMin = aptStartMin + aptDuration
 
-        const newStartMin = timeToMinutes(formData.time)
-        const newDuration = formData.duration || 30
+        const newStartMin = timeToMinutes(submissionData.time)
+        const newDuration = submissionData.duration || 30
         const newEndMin = newStartMin + newDuration
 
         return newStartMin < aptEndMin && aptStartMin < newEndMin
@@ -843,8 +1234,8 @@ export default function AppointmentsTablePage() {
         const aptEndMins = aptEndMin % 60
         const aptEndTime = `${String(aptEndHours).padStart(2, "0")}:${String(aptEndMins).padStart(2, "0")}`
 
-        const newStartMin = timeToMinutes(formData.time)
-        const newDuration = formData.duration || 30
+        const newStartMin = timeToMinutes(submissionData.time)
+        const newDuration = submissionData.duration || 30
         const newEndMin = newStartMin + newDuration
 
         const newEndHours = Math.floor(newEndMin / 60)
@@ -852,7 +1243,7 @@ export default function AppointmentsTablePage() {
         const newEndTime = `${String(newEndHours).padStart(2, "0")}:${String(newEndMins).padStart(2, "0")}`
 
         toast.error(
-          `Doctor ${submissionData.doctorName} has another appointment from ${conflictingApt.time} to ${aptEndTime} on ${formData.date}. Please choose a different time.`,
+          `Doctor ${submissionData.doctorName} has another appointment from ${conflictingApt.time} to ${aptEndTime} on ${submissionData.date}. Please choose a different time.`,
         )
       }
       return
@@ -889,8 +1280,8 @@ export default function AppointmentsTablePage() {
         setFormData({
           patientId: "",
           patientName: "",
-          doctorId: "",
-          doctorName: "",
+          doctorId: user?.role === "doctor" ? user.id : "",
+          doctorName: user?.role === "doctor" ? user.name : "",
           date: "",
           time: "",
           type: "Consultation",
@@ -960,7 +1351,8 @@ export default function AppointmentsTablePage() {
           procedures: proceduresArray,
           findings: reportData.findings.trim(),
           notes: reportData.notes.trim(),
-          nextVisit: reportData.nextVisit || null,
+          nextVisitDate: reportData.nextVisitDate || null,
+          nextVisitTime: reportData.nextVisitTime || null,
           followUpDetails: reportData.followUpDetails || "",
         }),
       })
@@ -969,27 +1361,18 @@ export default function AppointmentsTablePage() {
 
       if (res.ok) {
         toast.success("Report created successfully")
-
-        // Update the appointmentReports state immediately
-        const appointmentId = selectedAppointment._id || selectedAppointment.id
-        setAppointmentReports((prev) => ({
-          ...prev,
-          [appointmentId]: true,
-        }))
-
-        // Also refresh the complete list
-        await checkAppointmentReports()
-
         setShowReportForm(false)
         setReportErrors({})
         setReportData({
           procedures: [],
           findings: "",
           notes: "",
-          nextVisit: "",
+          nextVisitDate: "",
+          nextVisitTime: "",
           followUpDetails: "",
         })
         setSelectedAppointment(null)
+        checkAppointmentReports()
       } else {
         console.error("[v0] Report creation error:", responseData)
         toast.error(responseData.error || "Failed to create report")
@@ -1002,13 +1385,17 @@ export default function AppointmentsTablePage() {
     }
   }
 
-  // Function to check if appointment can be closed
+  // Function to check if appointment can be closed (has report)
   const canCloseAppointment = (appointmentId: string) => {
     return appointmentReports[appointmentId] === true
   }
 
-  // Handler to open the referral modal
   const handleOpenReferModal = (appointment: any) => {
+    if (appointment.isReferred && String(appointment.originalDoctorId) !== String(currentUserId)) {
+      toast.error("This appointment is currently referred to another doctor and cannot be referred again by you.")
+      return
+    }
+
     setSelectedAppointmentForReferral(appointment)
     setShowReferModal(true)
   }
@@ -1018,42 +1405,72 @@ export default function AppointmentsTablePage() {
   const completedAppointments = appointments.filter((apt) => apt.status === "completed").length
   const cancelledAppointments = appointments.filter((apt) => apt.status === "cancelled").length
 
+  // Calculate total pages
+  const totalPages = Math.ceil(
+    appointments
+      .filter((apt) => {
+        if (user?.role !== "doctor") return true
+        const isCurrentDoctor = String(apt.doctorId) === String(user?.id)
+        const isOriginalDoctor = String(apt.originalDoctorId) === String(user?.id)
+        return isCurrentDoctor || isOriginalDoctor
+      })
+      .filter(
+        (apt) =>
+          !searchQuery ||
+          apt.patientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.doctorName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.type?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          apt.status?.toLowerCase().includes(searchQuery.toLowerCase()),
+      ).length / itemsPerPage,
+  )
+
   return (
     <ProtectedRoute>
-      <div className="flex h-screen bg-background">
+      <div className="flex h-screen bg-gray-50/50">
         <Sidebar />
         <main className="flex-1 overflow-y-auto md:pt-0 pt-16">
           <div className="p-4 sm:p-6 lg:p-8">
-            <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Appointments Table</h1>
-                <p className="text-muted-foreground text-sm mt-1">View and manage all appointments</p>
+            <div className="mb-8">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">Appointments Table</h1>
+                  <p className="text-gray-500 text-sm mt-1">View and manage all appointments</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <StatCard
+                  label="Total Appointments"
+                  value={totalAppointments}
+                  icon={<CalendarDays className="w-5 h-5" />}
+                  loading={loading.appointments}
+                />
+                <StatCard
+                  label="Confirmed"
+                  value={confirmedAppointments}
+                  icon={<Clock className="w-5 h-5" />}
+                  variant="default"
+                  loading={loading.appointments}
+                />
+                <StatCard
+                  label="Completed"
+                  value={completedAppointments}
+                  icon={<CheckCircle2 className="w-5 h-5" />}
+                  variant="success"
+                  loading={loading.appointments}
+                />
+                <StatCard
+                  label="Cancelled"
+                  value={cancelledAppointments}
+                  icon={<XCircle className="w-5 h-5" />}
+                  variant="error"
+                  loading={loading.appointments}
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-              <StatCard label="Total Appointments" value={totalAppointments} icon={<Calendar className="w-6 h-6" />} />
-              <StatCard
-                label="Confirmed"
-                value={confirmedAppointments}
-                icon={<Clock className="w-6 h-6" />}
-                variant="default"
-              />
-              <StatCard
-                label="Completed"
-                value={completedAppointments}
-                icon={<CheckCircle2 className="w-6 h-6" />}
-                variant="success"
-              />
-              <StatCard
-                label="Cancelled"
-                value={cancelledAppointments}
-                icon={<XCircle className="w-6 h-6" />}
-                variant="error"
-              />
-            </div>
-
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div className="flex gap-2 flex-wrap">
                 <button
                   onClick={() => {
@@ -1075,21 +1492,36 @@ export default function AppointmentsTablePage() {
                     }
                   }}
                   disabled={loading.appointments || loading.patients || loading.doctors}
-                  className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground px-4 py-2 rounded-lg transition-colors font-medium cursor-pointer disabled:cursor-not-allowed"
+                  className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-blue-400 disabled:to-blue-500 text-white px-5 py-2.5 rounded-lg transition-all duration-200 font-medium cursor-pointer disabled:cursor-not-allowed shadow-xs hover:shadow-sm"
                 >
                   {loading.appointments || loading.patients || loading.doctors ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="flex justify-center items-center gap-1">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></div>
+                        <div
+                          className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                          style={{ animationDelay: "0.1s" }}
+                        ></div>
+                        <div
+                          className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                          style={{ animationDelay: "0.2s" }}
+                        ></div>
+                      </div>
+                      <span className="text-sm">Loading...</span>
+                    </div>
                   ) : (
-                    <Plus className="w-4 h-4" />
+                    <>
+                      <Plus className="w-4 h-4" />
+                      New Appointment
+                    </>
                   )}
-                  New Appointment
                 </button>
 
                 {user?.role === "doctor" && (
                   <button
                     onClick={() => setShowReferralModal(true)}
                     disabled={loading.appointments}
-                    className="flex items-center justify-center gap-2 bg-secondary hover:bg-secondary/90 disabled:bg-secondary/50 text-secondary-foreground px-4 py-2 rounded-lg transition-colors font-medium cursor-pointer disabled:cursor-not-allowed"
+                    className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 disabled:from-purple-400 disabled:to-purple-500 text-white px-5 py-2.5 rounded-lg transition-all duration-200 font-medium cursor-pointer disabled:cursor-not-allowed shadow-xs hover:shadow-sm"
                   >
                     <Plus className="w-4 h-4" />
                     Refer Unassigned Patient
@@ -1100,7 +1532,7 @@ export default function AppointmentsTablePage() {
               <AppointmentsTableView
                 appointments={appointments}
                 userRole={user?.role || ""}
-                userId={user?.id || ""}
+                userId={currentUserId}
                 appointmentReports={appointmentReports}
                 loading={loading}
                 onEdit={handleEditAppointment}
@@ -1134,18 +1566,39 @@ export default function AppointmentsTablePage() {
                 }
                 canCloseAppointment={canCloseAppointment}
                 onReferAppointment={handleOpenReferModal}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setCurrentPage}
+                onItemsPerPageChange={setItemsPerPage}
+                permissions={permissions}
               />
             </div>
 
+            {/* New Appointment Modal */}
             {showForm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-card rounded-lg shadow-lg border border-border p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-                  <h2 className="text-xl font-bold mb-4 text-foreground">
-                    {editingId ? "Edit Appointment" : "Schedule Appointment"}
-                  </h2>
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-2 duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-900">
+                      {editingId ? "Edit Appointment" : "Schedule Appointment"}
+                    </h2>
+                    <button
+                      onClick={() => {
+                        setShowForm(false)
+                        setEditingId(null)
+                        setFormErrors({})
+                      }}
+                      className="text-gray-400 hover:text-gray-500 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                   <form onSubmit={handleAddAppointment} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Patient *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Patient *</label>
                       <SearchableDropdown
                         items={patients.map((p) => ({ ...p, id: p._id }))}
                         selectedItem={getSelectedPatient()}
@@ -1159,9 +1612,19 @@ export default function AppointmentsTablePage() {
                       />
                     </div>
 
-                    {user?.role !== "doctor" && (
+                    {user?.role === "doctor" ? (
                       <div>
-                        <label className="block text-sm font-medium text-foreground mb-1">Doctor *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Doctor</label>
+                        <input
+                          type="text"
+                          value={user.name}
+                          disabled
+                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-700 text-sm cursor-not-allowed"
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Doctor *</label>
                         <SearchableDropdown
                           items={doctors}
                           selectedItem={getSelectedDoctor()}
@@ -1176,20 +1639,8 @@ export default function AppointmentsTablePage() {
                       </div>
                     )}
 
-                    {user?.role === "doctor" && (
-                      <div>
-                        <label className="block text-sm font-medium text-foreground mb-1">Doctor</label>
-                        <input
-                          type="text"
-                          value={user.name}
-                          disabled
-                          className="w-full px-4 py-2 bg-muted border border-border rounded-lg text-foreground text-sm cursor-not-allowed"
-                        />
-                      </div>
-                    )}
-
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Date *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
                       <input
                         type="date"
                         value={formData.date}
@@ -1198,15 +1649,15 @@ export default function AppointmentsTablePage() {
                           setFormErrors({ ...formErrors, date: "" })
                         }}
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm cursor-pointer disabled:cursor-not-allowed ${
-                          formErrors.date ? "border-destructive" : "border-border"
+                        className={`w-full px-4 py-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200 ${
+                          formErrors.date ? "border-red-300" : "border-gray-300"
                         }`}
                       />
-                      {formErrors.date && <p className="text-xs text-destructive mt-1">{formErrors.date}</p>}
+                      {formErrors.date && <p className="text-xs text-red-600 mt-1">{formErrors.date}</p>}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Time *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Time *</label>
                       <input
                         type="time"
                         value={formData.time}
@@ -1215,30 +1666,31 @@ export default function AppointmentsTablePage() {
                           setFormErrors({ ...formErrors, time: "" })
                         }}
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm cursor-pointer disabled:cursor-not-allowed ${
-                          formErrors.time ? "border-destructive" : "border-border"
+                        className={`w-full px-4 py-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200 ${
+                          formErrors.time ? "border-red-300" : "border-gray-300"
                         }`}
                       />
-                      {formErrors.time && <p className="text-xs text-destructive mt-1">{formErrors.time}</p>}
+                      {formErrors.time && <p className="text-xs text-red-600 mt-1">{formErrors.time}</p>}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Type</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                       <select
                         value={formData.type}
                         onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm cursor-pointer disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200"
                       >
                         <option value="Consultation">Consultation</option>
                         <option value="Cleaning">Cleaning</option>
                         <option value="Filling">Filling</option>
                         <option value="Root Canal">Root Canal</option>
+                        <option value="Other">Other</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Room Number *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Room Number *</label>
                       <input
                         type="text"
                         placeholder="Room Number (e.g., Room 1)"
@@ -1248,17 +1700,15 @@ export default function AppointmentsTablePage() {
                           setFormErrors({ ...formErrors, roomNumber: "" })
                         }}
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-pointer disabled:cursor-not-allowed ${
-                          formErrors.roomNumber ? "border-destructive" : "border-border"
+                        className={`w-full px-4 py-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 placeholder-gray-400 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200 ${
+                          formErrors.roomNumber ? "border-red-300" : "border-gray-300"
                         }`}
                       />
-                      {formErrors.roomNumber && (
-                        <p className="text-xs text-destructive mt-1">{formErrors.roomNumber}</p>
-                      )}
+                      {formErrors.roomNumber && <p className="text-xs text-red-600 mt-1">{formErrors.roomNumber}</p>}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Duration (minutes)</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
                       <input
                         type="number"
                         min="1"
@@ -1270,21 +1720,34 @@ export default function AppointmentsTablePage() {
                           })
                         }
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm cursor-pointer disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200"
                       />
-                      {formErrors.duration && <p className="text-xs text-destructive mt-1">{formErrors.duration}</p>}
+                      {formErrors.duration && <p className="text-xs text-red-600 mt-1">{formErrors.duration}</p>}
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 pt-4">
                       <button
                         type="submit"
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-accent-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm disabled:cursor-not-allowed cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-blue-400 disabled:to-blue-500 text-white px-4 py-2.5 rounded-lg transition-all duration-200 font-medium text-sm disabled:cursor-not-allowed cursor-pointer"
                       >
                         {(loading.addAppointment || loading.updateAppointment) && (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="flex justify-center items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></div>
+                              <div
+                                className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                                style={{ animationDelay: "0.1s" }}
+                              ></div>
+                              <div
+                                className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                                style={{ animationDelay: "0.2s" }}
+                              ></div>
+                            </div>
+                            <span className="text-sm">Processing...</span>
+                          </div>
                         )}
-                        {editingId ? "Update" : "Schedule"}
+                        {!loading.addAppointment && !loading.updateAppointment && (editingId ? "Update" : "Schedule")}
                       </button>
                       <button
                         type="button"
@@ -1294,7 +1757,7 @@ export default function AppointmentsTablePage() {
                           setFormErrors({})
                         }}
                         disabled={loading.addAppointment || loading.updateAppointment}
-                        className="flex-1 bg-muted hover:bg-muted/80 disabled:bg-muted/50 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer disabled:cursor-not-allowed"
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-lg transition-all duration-200 font-medium text-sm cursor-pointer disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
@@ -1304,13 +1767,26 @@ export default function AppointmentsTablePage() {
               </div>
             )}
 
+            {/* Report Creation Modal */}
             {showReportForm && user?.role === "doctor" && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-card rounded-lg shadow-lg border border-border p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
-                  <h2 className="text-xl font-bold mb-4 text-foreground">Create Appointment Report</h2>
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-2 duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-900">Create Appointment Report</h2>
+                    <button
+                      onClick={() => {
+                        setShowReportForm(false)
+                        setReportErrors({})
+                        setSelectedAppointment(null)
+                      }}
+                      className="text-gray-400 hover:text-gray-500 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
                   <form onSubmit={handleCreateReport} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Procedures *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Procedures *</label>
                       <textarea
                         placeholder="List procedures performed (one per line)..."
                         value={reportData.procedures.join("\n")}
@@ -1322,18 +1798,18 @@ export default function AppointmentsTablePage() {
                           setReportErrors({ ...reportErrors, procedures: "" })
                         }}
                         disabled={loading.createReport}
-                        className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-pointer disabled:cursor-not-allowed ${
-                          reportErrors.procedures ? "border-destructive" : "border-border"
+                        className={`w-full px-4 py-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 placeholder-gray-400 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200 ${
+                          reportErrors.procedures ? "border-red-300" : "border-gray-300"
                         }`}
                         rows={3}
                       />
                       {reportErrors.procedures && (
-                        <p className="text-xs text-destructive mt-1">{reportErrors.procedures}</p>
+                        <p className="text-xs text-red-600 mt-1">{reportErrors.procedures}</p>
                       )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Findings *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Findings *</label>
                       <textarea
                         placeholder="Clinical findings..."
                         value={reportData.findings}
@@ -1345,18 +1821,16 @@ export default function AppointmentsTablePage() {
                           setReportErrors({ ...reportErrors, findings: "" })
                         }}
                         disabled={loading.createReport}
-                        className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-pointer disabled:cursor-not-allowed ${
-                          reportErrors.findings ? "border-destructive" : "border-border"
+                        className={`w-full px-4 py-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 placeholder-gray-400 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200 ${
+                          reportErrors.findings ? "border-red-300" : "border-gray-300"
                         }`}
                         rows={3}
                       />
-                      {reportErrors.findings && (
-                        <p className="text-xs text-destructive mt-1">{reportErrors.findings}</p>
-                      )}
+                      {reportErrors.findings && <p className="text-xs text-red-600 mt-1">{reportErrors.findings}</p>}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-2">Notes *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Notes *</label>
                       <textarea
                         placeholder="Additional notes..."
                         value={reportData.notes}
@@ -1368,32 +1842,49 @@ export default function AppointmentsTablePage() {
                           setReportErrors({ ...reportErrors, notes: "" })
                         }}
                         disabled={loading.createReport}
-                        className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-pointer disabled:cursor-not-allowed ${
-                          reportErrors.notes ? "border-destructive" : "border-border"
+                        className={`w-full px-4 py-2.5 bg-white border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 placeholder-gray-400 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200 ${
+                          reportErrors.notes ? "border-red-300" : "border-gray-300"
                         }`}
                         rows={2}
                       />
-                      {reportErrors.notes && <p className="text-xs text-destructive mt-1">{reportErrors.notes}</p>}
+                      {reportErrors.notes && <p className="text-xs text-red-600 mt-1">{reportErrors.notes}</p>}
+                    </div>
+
+                    <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Next Visit Date</label>
+                        <input
+                          type="date"
+                          value={reportData.nextVisitDate}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              nextVisitDate: e.target.value,
+                            })
+                          }
+                          disabled={loading.createReport}
+                          className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Next Visit Time</label>
+                        <input
+                          type="time"
+                          value={reportData.nextVisitTime}
+                          onChange={(e) =>
+                            setReportData({
+                              ...reportData,
+                              nextVisitTime: e.target.value,
+                            })
+                          }
+                          disabled={loading.createReport}
+                          className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200"
+                        />
+                      </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Next Visit</label>
-                      <input
-                        type="date"
-                        value={reportData.nextVisit}
-                        onChange={(e) =>
-                          setReportData({
-                            ...reportData,
-                            nextVisit: e.target.value,
-                          })
-                        }
-                        disabled={loading.createReport}
-                        className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm cursor-pointer disabled:cursor-not-allowed"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">Follow-up Details</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Follow-up Details</label>
                       <textarea
                         placeholder="Follow-up details..."
                         value={reportData.followUpDetails}
@@ -1404,19 +1895,35 @@ export default function AppointmentsTablePage() {
                           })
                         }
                         disabled={loading.createReport}
-                        className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-pointer disabled:cursor-not-allowed"
+                        className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 placeholder-gray-400 text-sm cursor-pointer disabled:cursor-not-allowed transition-all duration-200"
                         rows={2}
                       />
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 pt-4">
                       <button
                         type="submit"
                         disabled={loading.createReport}
-                        className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-accent-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm disabled:cursor-not-allowed cursor-pointer"
+                        className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 disabled:from-blue-400 disabled:to-blue-500 text-white px-4 py-2.5 rounded-lg transition-all duration-200 font-medium text-sm disabled:cursor-not-allowed cursor-pointer"
                       >
-                        {loading.createReport && <Loader2 className="w-4 h-4 animate-spin" />}
-                        {loading.createReport ? "Creating..." : "Create Report"}
+                        {loading.createReport ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="flex justify-center items-center gap-1">
+                              <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></div>
+                              <div
+                                className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                                style={{ animationDelay: "0.1s" }}
+                              ></div>
+                              <div
+                                className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"
+                                style={{ animationDelay: "0.2s" }}
+                              ></div>
+                            </div>
+                            <span className="text-sm">Creating...</span>
+                          </div>
+                        ) : (
+                          "Create Report"
+                        )}
                       </button>
                       <button
                         type="button"
@@ -1426,7 +1933,7 @@ export default function AppointmentsTablePage() {
                           setSelectedAppointment(null)
                         }}
                         disabled={loading.createReport}
-                        className="flex-1 bg-muted hover:bg-muted/80 disabled:bg-muted/50 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer disabled:cursor-not-allowed"
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 text-gray-700 px-4 py-2.5 rounded-lg transition-all duration-200 font-medium text-sm cursor-pointer disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
@@ -1440,15 +1947,12 @@ export default function AppointmentsTablePage() {
               <PatientReferralModal
                 isOpen={showReferralModal}
                 onClose={() => setShowReferralModal(false)}
-                onSuccess={() => {
-                  // Optionally refresh data if needed
-                }}
+                onSuccess={() => {}}
                 token={token}
                 doctoName={user?.name || ""}
               />
             )}
 
-            {/* Referral Modal JSX */}
             {showReferModal && selectedAppointmentForReferral && (
               <ReferAppointmentModal
                 isOpen={showReferModal}

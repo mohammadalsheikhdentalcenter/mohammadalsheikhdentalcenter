@@ -1,79 +1,85 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "./auth-context"
-import { Eye, EyeOff, Lock, User } from "lucide-react"
-import { toast } from "react-hot-toast"
+import type React from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "./auth-context";
+import { Eye, EyeOff, Lock, User } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 export function LoginForm() {
-  const [username, setUsername] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const { login } = useAuth()
-  const router = useRouter()
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
 
   const validateForm = (): boolean => {
     if (!username.trim()) {
-      toast.error("Username is required")
-      return false
+      toast.error("Username is required");
+      return false;
     }
 
     if (username.trim().length < 3) {
-      toast.error("Username must be at least 3 characters")
-      return false
+      toast.error("Username must be at least 3 characters");
+      return false;
     }
 
     if (!password) {
-      toast.error("Password is required")
-      return false
+      toast.error("Password is required");
+      return false;
     }
 
     if (password.length < 6) {
-      toast.error("Password must be at least 6 characters")
-      return false
+      toast.error("Password must be at least 6 characters");
+      return false;
     }
 
-    return true
-  }
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+    e.preventDefault();
 
     if (!validateForm()) {
-      return
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
 
     try {
-      await login(username, password)
-      toast.success("Login successful!")
-      router.push("/dashboard")
+      await login(username, password);
+      toast.success("Login successful!");
+      router.push("/dashboard");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Login failed"
-      toast.error(errorMessage)
+      const errorMessage = err instanceof Error ? err.message : "Login failed";
+      toast.error(errorMessage);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="w-full">
       <div className="bg-card rounded-2xl shadow-lg border border-border p-6 sm:p-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1">Welcome Back</h2>
-          <p className="text-muted-foreground text-xs sm:text-sm">Sign in to your account</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1">
+            Welcome Back
+          </h2>
+          <p className="text-muted-foreground text-xs sm:text-sm">
+            Sign in to your account
+          </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
           <div>
-            <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">Username</label>
+            <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
+              Username
+            </label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               <input
@@ -89,7 +95,9 @@ export function LoginForm() {
 
           {/* Password Field */}
           <div>
-            <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">Password</label>
+            <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
+              Password
+            </label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               <input
@@ -125,7 +133,10 @@ export function LoginForm() {
               />
               <span className="text-muted-foreground">Remember me</span>
             </label>
-            <a href="#" className="text-primary hover:text-primary/80 font-medium transition-colors">
+            <a
+              href="#"
+              className="text-primary hover:text-primary/80 font-medium transition-colors"
+            >
               Forgot password?
             </a>
           </div>
@@ -145,7 +156,9 @@ export function LoginForm() {
 
         {/* Sign Up Link */}
         <div className="text-center">
-          <p className="text-muted-foreground text-xs sm:text-sm mb-3">Don't have an account?</p>
+          <p className="text-muted-foreground text-xs sm:text-sm mb-3">
+            Don't have an account?
+          </p>
           <a
             href="/signup"
             className="block w-full bg-accent/10 hover:bg-accent/20 text-accent font-semibold py-2 sm:py-2.5 rounded-lg transition-colors duration-200 border border-accent/30 text-sm sm:text-base"
@@ -156,7 +169,9 @@ export function LoginForm() {
       </div>
 
       {/* Footer */}
-      <p className="text-center text-xs text-muted-foreground mt-6">© 2025 DentalCare Pro. All rights reserved.</p>
+      <p className="text-center text-xs text-muted-foreground mt-6">
+        © 2025 Dr.Mohammad Alsheikh Dental Center. All rights reserved.
+      </p>
     </div>
-  )
+  );
 }

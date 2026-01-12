@@ -1,9 +1,13 @@
+//@ts-nocheck
 "use client"
 
 import type React from "react"
 import { useState } from "react"
-import { X, Loader2 } from "lucide-react"
+import { X, Loader2, Plus } from "lucide-react"
 import { toast } from "react-hot-toast"
+import PhoneInput from "react-phone-number-input"
+import "react-phone-number-input/style.css"
+import { validatePhoneWithDetails } from "@/lib/validation"
 
 interface PatientReferralFormProps {
   isOpen: boolean
@@ -16,7 +20,7 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     patientName: "",
-    patientPhone: "",
+    phones: [{ number: "", isPrimary: true }],
     patientEmail: "",
     patientDob: "",
     patientIdNumber: "",
@@ -31,7 +35,20 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
     const newErrors: Record<string, string> = {}
 
     if (!formData.patientName.trim()) newErrors.patientName = "Patient name is required"
-    if (!formData.patientPhone.trim()) newErrors.patientPhone = "Patient phone is required"
+
+    const validPhones = formData.phones.filter((p) => p.number.trim())
+    if (validPhones.length === 0) {
+      newErrors.patientPhone = "At least one phone number is required"
+    } else {
+      for (const phone of validPhones) {
+        const validation = validatePhoneWithDetails(phone.number)
+        if (!validation.valid) {
+          newErrors.patientPhone = validation.error
+          break
+        }
+      }
+    }
+
     if (!formData.patientDob) newErrors.patientDob = "Date of birth is required"
     if (!formData.referralReason.trim()) newErrors.referralReason = "Referral reason is required"
 
@@ -57,7 +74,7 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
         },
         body: JSON.stringify({
           patientName: formData.patientName,
-          patientPhone: formData.patientPhone,
+          patientPhones: formData.phones.filter((p) => p.number.trim()),
           patientEmail: formData.patientEmail || "",
           patientDob: formData.patientDob,
           patientIdNumber: formData.patientIdNumber || "",
@@ -74,7 +91,7 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
         toast.success("Patient referral sent to receptionist successfully!")
         setFormData({
           patientName: "",
-          patientPhone: "",
+          phones: [{ number: "", isPrimary: true }],
           patientEmail: "",
           patientDob: "",
           patientIdNumber: "",
@@ -96,6 +113,30 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
     } finally {
       setLoading(false)
     }
+  }
+
+  const addPhoneField = () => {
+    setFormData({
+      ...formData,
+      phones: [...formData.phones, { number: "", isPrimary: false }],
+    })
+  }
+
+  const removePhoneField = (index: number) => {
+    const newPhones = formData.phones.filter((_, i) => i !== index)
+    if (newPhones.length > 0 && !newPhones.some((p) => p.isPrimary)) {
+      newPhones[0].isPrimary = true
+    }
+    setFormData({ ...formData, phones: newPhones })
+  }
+
+  const updatePhoneField = (index: number, number: string, isPrimary: boolean) => {
+    const newPhones = formData.phones.map((p, i) => {
+      if (i === index) return { number, isPrimary }
+      if (isPrimary && i !== index) return { ...p, isPrimary: false }
+      return p
+    })
+    setFormData({ ...formData, phones: newPhones })
   }
 
   if (!isOpen) return null
@@ -134,22 +175,57 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
               {errors.patientName && <p className="text-xs text-destructive mt-1">{errors.patientName}</p>}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Phone *</label>
-              <input
-                type="tel"
-                value={formData.patientPhone}
-                onChange={(e) => {
-                  setFormData({ ...formData, patientPhone: e.target.value })
-                  setErrors({ ...errors, patientPhone: "" })
-                }}
-                disabled={loading}
-                className={`w-full px-4 py-2 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm ${
-                  errors.patientPhone ? "border-destructive" : "border-border"
-                }`}
-                placeholder="e.g., 9876543210"
-              />
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-foreground mb-2">Phone Numbers *</label>
+              <div className="space-y-2">
+                {formData.phones.map((phone, index) => (
+                  <div key={index} className="flex gap-2 items-center">
+                    <div className="flex-1">
+                      <PhoneInput
+                        international
+                        countryCallingCodeEditable={false}
+                        defaultCountry="US"
+                        value={phone.number}
+                        onChange={(value) => updatePhoneField(index, value || "", phone.isPrimary)}
+                        className="phone-input-wrapper"
+                        disabled={loading}
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={phone.isPrimary}
+                        onChange={(e) => updatePhoneField(index, phone.number, e.target.checked)}
+                        disabled={loading}
+                        className="w-4 h-4"
+                      />
+                      Primary
+                    </label>
+                    {formData.phones.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removePhoneField(index)}
+                        className="p-2 text-red-500 bg-red-50 rounded cursor-pointer"
+                        disabled={loading}
+                      >
+                        <X size={18} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addPhoneField}
+                  className="mt-2 px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:opacity-90 cursor-pointer disabled:cursor-not-allowed"
+                  disabled={loading}
+                >
+                  <Plus size={16} className="inline mr-1" /> Add Phone
+                </button>
+              </div>
               {errors.patientPhone && <p className="text-xs text-destructive mt-1">{errors.patientPhone}</p>}
+              <p className="text-xs text-muted-foreground mt-1">
+                Format: + followed by country code and number. Mark one as primary.
+              </p>
             </div>
 
             <div>

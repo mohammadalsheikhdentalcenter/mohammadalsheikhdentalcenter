@@ -12,6 +12,8 @@ import {
 } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 import { Types } from "mongoose"
+import { formatPhoneForDatabase, validatePhoneWithDetails } from "@/lib/validation"
+
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -59,12 +61,35 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const { id } = params
     const updateData = await request.json()
 
+    // Check if patient exists
+    const patient = await Patient.findById(id)
+    if (!patient) {
+      return NextResponse.json({ error: "Patient not found" }, { status: 404 })
+    }
+
+    // Check if idNumber is being updated and if it's unique
+    if (updateData.idNumber && updateData.idNumber !== patient.idNumber) {
+      const existingPatientWithId = await Patient.findOne({
+        idNumber: updateData.idNumber.trim(),
+        _id: { $ne: id }, // Exclude the current patient from the check
+      })
+      if (existingPatientWithId) {
+        return NextResponse.json(
+          {
+            error: `Patient ID number "${updateData.idNumber}" already exists. Please use a different ID number.`,
+          },
+          { status: 409 },
+        )
+      }
+      updateData.idNumber = updateData.idNumber.trim()
+    }
+
     // Handle email in update data - convert empty strings to null
     if (updateData.email !== undefined) {
       updateData.email = updateData.email?.trim() || null
 
-      // Check for email uniqueness only if email is provided
-      if (updateData.email) {
+      // Check for email uniqueness only if email is provided and not null/empty
+      if (updateData.email && updateData.email !== "" && updateData.email !== patient.email) {
         const existingPatient = await Patient.findOne({
           email: updateData.email.toLowerCase(),
           _id: { $ne: id },
@@ -78,49 +103,136 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
     }
 
-    if (updateData.idNumber) {
-      const trimmedIdNumber = updateData.idNumber.trim()
-      const existingPatientWithId = await Patient.findOne({
-        idNumber: trimmedIdNumber,
-        _id: { $ne: id },
-      })
-      if (existingPatientWithId) {
-        console.log("  ID number already exists:", trimmedIdNumber)
+    // Validate phones if they're being updated
+    if (updateData.phones && Array.isArray(updateData.phones)) {
+      // Filter out empty phone numbers
+      const validPhones = updateData.phones.filter((p: any) => p.number?.trim()) || []
+      
+      if (validPhones.length === 0) {
         return NextResponse.json(
-          {
-            error: "ID number already exists. Please use a different ID number.",
-          },
-          { status: 409 },
+          { error: "At least one phone number is required" },
+          { status: 400 }
         )
+      }
+      
+      // Validate each phone
+      for (const phone of validPhones) {
+        const validation = validatePhoneWithDetails(phone.number)
+        if (!validation.valid) {
+          return NextResponse.json({ error: validation.error }, { status: 400 })
+        }
+      }
+
+      // Format phones for database
+      updateData.phones = validPhones.map((p: any) => ({
+        number: formatPhoneForDatabase(p.number),
+        isPrimary: p.isPrimary || false,
+      }))
+
+      // Ensure at least one phone is marked as primary
+      if (!updateData.phones.some((p: any) => p.isPrimary)) {
+        updateData.phones[0].isPrimary = true
       }
     }
 
-    // Validate critical credentials if they're being updated
-    if (updateData.phone || updateData.dob || updateData.idNumber) {
-      const patient = await Patient.findById(id)
-      if (!patient) {
-        return NextResponse.json({ error: "Patient not found" }, { status: 404 })
+    // Merge existing patient data with update data for validation
+    const mergedData = { 
+      ...patient.toObject(), 
+      ...updateData,
+      // If phones weren't updated, use existing phones
+      phones: updateData.phones || patient.phones
+    }
+    
+    // Validate critical credentials
+    const missingCriticalCredentials = []
+    
+    // Check name
+    if (!mergedData.name?.trim()) missingCriticalCredentials.push("Name")
+    
+    // Check phones - ensure we have at least one valid phone
+    const hasValidPhone = mergedData.phones && 
+      Array.isArray(mergedData.phones) && 
+      mergedData.phones.some((p: any) => p.number?.trim())
+    if (!hasValidPhone) missingCriticalCredentials.push("Phone Number")
+    
+    // Check date of birth
+    if (!mergedData.dob?.trim()) missingCriticalCredentials.push("Date of Birth")
+    
+    // Check ID number
+    if (!mergedData.idNumber?.trim()) missingCriticalCredentials.push("ID Number")
+
+    if (missingCriticalCredentials.length > 0) {
+      return NextResponse.json(
+        {
+          error: `Cannot update: Missing critical patient credentials: ${missingCriticalCredentials.join(", ")}`,
+        },
+        { status: 400 },
+      )
+    }
+
+    // Prepare update data - ensure email is properly handled
+    const updateDataToUse: any = { ...updateData }
+    if (updateDataToUse.email === "") {
+      updateDataToUse.email = null
+    }
+
+    // Handle doctor assignment update
+    if (updateDataToUse.assignedDoctorId && updateDataToUse.assignedDoctorId !== patient.assignedDoctorId?.toString()) {
+      if (!Types.ObjectId.isValid(updateDataToUse.assignedDoctorId)) {
+        return NextResponse.json({ error: "Invalid doctor ID format" }, { status: 400 })
       }
 
-      const mergedData = { ...patient.toObject(), ...updateData }
+      const doctor = await User.findById(updateDataToUse.assignedDoctorId)
+      if (!doctor) {
+        return NextResponse.json({ error: "Selected doctor not found" }, { status: 404 })
+      }
 
-      const missingCriticalCredentials = []
-      if (!mergedData.name?.trim()) missingCriticalCredentials.push("Name")
-      if (!mergedData.phone?.trim()) missingCriticalCredentials.push("Phone")
-      if (!mergedData.dob?.trim()) missingCriticalCredentials.push("Date of Birth")
-      if (!mergedData.idNumber?.trim()) missingCriticalCredentials.push("ID Number")
+      if (doctor.role !== "doctor") {
+        return NextResponse.json({ error: "Selected user is not a doctor" }, { status: 400 })
+      }
 
-      if (missingCriticalCredentials.length > 0) {
-        return NextResponse.json(
-          {
-            error: `Cannot update: Missing critical patient credentials: ${missingCriticalCredentials.join(", ")}`,
-          },
-          { status: 400 },
-        )
+      // Add to doctor history if doctor is changing
+      const doctorHistoryEntry = {
+        doctorId: doctor._id,
+        doctorName: doctor.name,
+        startDate: new Date(),
+      }
+      
+      updateDataToUse.doctorHistory = [
+        ...(patient.doctorHistory || []),
+        doctorHistoryEntry,
+      ]
+    }
+
+    // Handle allergies - convert string to array if needed
+    if (updateDataToUse.allergies !== undefined) {
+      if (typeof updateDataToUse.allergies === 'string') {
+        updateDataToUse.allergies = updateDataToUse.allergies
+          .split(',')
+          .map((a: string) => a.trim())
+          .filter(Boolean)
+      } else if (Array.isArray(updateDataToUse.allergies)) {
+        updateDataToUse.allergies = updateDataToUse.allergies
+          .map((a: any) => typeof a === 'string' ? a.trim() : a)
+          .filter(Boolean)
       }
     }
 
-    const updatedPatient = await Patient.findByIdAndUpdate(id, updateData, {
+    // Handle medical conditions - convert string to array if needed
+    if (updateDataToUse.medicalConditions !== undefined) {
+      if (typeof updateDataToUse.medicalConditions === 'string') {
+        updateDataToUse.medicalConditions = updateDataToUse.medicalConditions
+          .split(',')
+          .map((c: string) => c.trim())
+          .filter(Boolean)
+      } else if (Array.isArray(updateDataToUse.medicalConditions)) {
+        updateDataToUse.medicalConditions = updateDataToUse.medicalConditions
+          .map((c: any) => typeof c === 'string' ? c.trim() : c)
+          .filter(Boolean)
+      }
+    }
+
+    const updatedPatient = await Patient.findByIdAndUpdate(id, updateDataToUse, {
       new: true,
       runValidators: true,
     }).populate("assignedDoctorId", "name email specialty")
@@ -130,15 +242,23 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     return NextResponse.json({ success: true, patient: updatedPatient })
-  } catch (error) {
-    console.error("  PUT /api/patients error:", error)
+  } catch (error: any) {
+    console.error("PUT /api/patients error:", error)
 
     // Handle duplicate key error specifically
     if (error.code === 11000) {
-      return NextResponse.json(
-        { error: "Email already exists in patient records. Please use a different email." },
-        { status: 409 },
-      )
+      if (error.keyPattern && error.keyPattern.email) {
+        return NextResponse.json(
+          { error: "Email already exists in patient records. Please use a different email." },
+          { status: 409 },
+        )
+      }
+      if (error.keyPattern && error.keyPattern.idNumber) {
+        return NextResponse.json(
+          { error: "Patient ID number already exists. Please use a different ID number." },
+          { status: 409 },
+        )
+      }
     }
 
     const errorMessage = error instanceof Error ? error.message : "Failed to update patient"

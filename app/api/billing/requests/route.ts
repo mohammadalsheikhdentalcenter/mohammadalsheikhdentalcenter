@@ -45,6 +45,11 @@ export async function GET(req: NextRequest) {
       const patient = await Patient.findById(new mongoose.Types.ObjectId(billing.patientId))
       const patientName = patient?.name || "Unknown Patient"
 
+      const allPatientBillings = await Billing.find({ patientId: billing.patientId }).lean()
+      const totalPaid = allPatientBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0)
+      const totalDebt = allPatientBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0)
+      const paymentPercentage = totalDebt > 0 ? Math.round((totalPaid / totalDebt) * 100 * 100) / 100 : 0
+
       if (billing.extraChargesRequested && Array.isArray(billing.extraChargesRequested)) {
         billing.extraChargesRequested.forEach((charge: any) => {
           if (!status || status === "all" || charge.status === status) {
@@ -60,6 +65,7 @@ export async function GET(req: NextRequest) {
               doctorName: charge.requestedBy || "Unknown Doctor",
               extraChargesRequested: charge,
               totalAmount: billing.totalAmount,
+              paymentPercentage, // Added payment percentage
             })
           }
         })

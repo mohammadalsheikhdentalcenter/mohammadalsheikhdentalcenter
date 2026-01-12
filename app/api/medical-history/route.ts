@@ -1,6 +1,6 @@
 //@ts-nocheck
 import { type NextRequest, NextResponse } from "next/server"
-import { MedicalHistory, connectDB, Patient, User, Appointment } from "@/lib/db-server"
+import { MedicalHistory, connectDB, Patient, User } from "@/lib/db-server"
 import { verifyToken, verifyPatientToken } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
@@ -43,42 +43,11 @@ export async function GET(request: NextRequest) {
     // }
 
     if (userRole === "doctor") {
+      console.log("[v0] Doctor accessing medical history for patient:", patientId)
+
       const patient = await Patient.findById(patientId)
       if (!patient) {
         return NextResponse.json({ error: "Patient not found" }, { status: 404 })
-      }
-
-      const currentDoctorIdStr = String(userId)
-      const assignedDoctorIdStr = patient.assignedDoctorId ? String(patient.assignedDoctorId) : null
-
-      const isCurrentAssignedDoctor = assignedDoctorIdStr === currentDoctorIdStr
-      const wasPreviouslyAssigned = patient.doctorHistory?.some((dh: any) => String(dh.doctorId) === currentDoctorIdStr)
-
-      const hasAppointment = await Appointment.findOne({
-        patientId: String(patientId),
-        doctorId: currentDoctorIdStr,
-        status: { $nin: ["cancelled", "no-show", "closed"] },
-      })
-
-      console.log("[v0] Appointment query for doctor:", {
-        patientId: String(patientId),
-        doctorId: currentDoctorIdStr,
-        statuses: ["active", "scheduled", "completed"],
-        foundAppointment: !!hasAppointment,
-        appointmentDetails: hasAppointment
-          ? { _id: hasAppointment._id, status: hasAppointment.status, doctorId: hasAppointment.doctorId }
-          : null,
-      })
-
-      console.log("[v0] Access check for doctor", currentDoctorIdStr, {
-        isCurrentAssignedDoctor,
-        wasPreviouslyAssigned,
-        hasAppointment: !!hasAppointment,
-      })
-
-      if (!isCurrentAssignedDoctor && !wasPreviouslyAssigned && !hasAppointment) {
-        console.error("[v0] Access denied - doctor not assigned to patient and no appointment")
-        return NextResponse.json({ error: "Access denied" }, { status: 403 })
       }
     }
 

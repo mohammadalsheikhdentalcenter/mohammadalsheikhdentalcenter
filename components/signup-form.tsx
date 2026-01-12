@@ -13,7 +13,7 @@ import {
   Phone,
   AlertCircle,
 } from "lucide-react";
-import { toast } from "react-hot-toast"
+import { toast } from "react-hot-toast";
 
 export function SignupForm() {
   const [selectedRole, setSelectedRole] = useState("receptionist");
@@ -159,7 +159,7 @@ export function SignupForm() {
             Create Account
           </h2>
           <p className="text-muted-foreground text-xs sm:text-sm">
-            Join DentalCare Pro today
+            Join Dr.Mohammad Alsheikh Dental Center today
           </p>
         </div>
 
@@ -379,7 +379,9 @@ export function SignupForm() {
       </div>
 
       {/* Footer */}
-       <p className="text-center text-xs text-muted-foreground mt-6">© 2025 Dr.Mohammad Alsheikh Dental Center. All rights reserved.</p>
+      <p className="text-center text-xs text-muted-foreground mt-6">
+        © 2025 Dr.Mohammad Alsheikh Dental Center. All rights reserved.
+      </p>
     </div>
   );
 }

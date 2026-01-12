@@ -81,6 +81,9 @@ export async function POST(request: NextRequest) {
       patientId: appointment?.patientId,
       patientName: appointment?.patientName,
       doctorId: appointment?.doctorId,
+      status: appointment?.status,
+      isReferred: appointment?.isReferred,
+      originalDoctorId: appointment?.originalDoctorId,
     })
 
     if (!appointment) {
@@ -108,12 +111,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the requesting doctor owns this appointment
-    if (String(appointment.doctorId) !== String(payload.userId)) {
+    const isReferBackStatus = appointment.status === "refer_back"
+    const isOriginalDoctor = String(appointment.originalDoctorId) === String(payload.userId)
+    const isCurrentDoctor = String(appointment.doctorId) === String(payload.userId)
+
+    if (isReferBackStatus && !isOriginalDoctor) {
+      return NextResponse.json(
+        { error: "Only the original doctor can refer this appointment after it has been referred back" },
+        { status: 403 },
+      )
+    }
+
+    // Verify the requesting doctor owns this appointment (or is original doctor in refer_back case)
+    if (!isReferBackStatus && !isCurrentDoctor) {
       return NextResponse.json({ error: "You can only refer your own appointments" }, { status: 403 })
     }
 
-    if (appointment.isReferred) {
+    // Check if appointment is already referred (and not in refer_back status)
+    if (appointment.isReferred && !isReferBackStatus) {
       return NextResponse.json({ error: "This appointment is already referred to another doctor" }, { status: 400 })
     }
 
@@ -123,7 +138,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Target doctor not found" }, { status: 404 })
     }
 
-    // Create referral record
+    // Create referral record with pending status
     const referral = await AppointmentReferral.create({
       appointmentId,
       patientId: String(appointment.patientId),
@@ -135,16 +150,30 @@ export async function POST(request: NextRequest) {
       referralReason: String(referralReason).trim(),
       status: "pending",
       notes: "",
+      createdAt: new Date(),
     })
 
-    await Appointment.findByIdAndUpdate(appointmentId, {
-      originalDoctorId: appointment.doctorId,
-      originalDoctorName: appointment.doctorName,
+    const appointmentUpdate: any = {
       doctorId: String(toDoctorId),
       doctorName: targetDoctor.name,
       isReferred: true,
       currentReferralId: referral._id,
-    })
+      updatedAt: new Date(),
+    }
+
+    if (isReferBackStatus) {
+      // Reset refer_back status to confirmed for new referral cycle
+      appointmentUpdate.status = "confirmed"
+      appointmentUpdate.awaitingOriginalDoctorAction = false
+      appointmentUpdate.lastReferBackDate = null
+      console.log("[v0] Re-referring appointment after refer_back - resetting flags")
+    } else {
+      // First time referral - set original doctor fields
+      appointmentUpdate.originalDoctorId = appointment.doctorId
+      appointmentUpdate.originalDoctorName = appointment.doctorName
+    }
+
+    await Appointment.findByIdAndUpdate(appointmentId, appointmentUpdate)
 
     console.log("[v0] Appointment referred successfully:", {
       appointmentId,
@@ -153,6 +182,8 @@ export async function POST(request: NextRequest) {
       fromDoctorName: payload.name,
       toDoctor: String(toDoctorId),
       toDoctorName: targetDoctor.name,
+      referralStatus: "pending",
+      isReReferral: isReferBackStatus,
     })
 
     return NextResponse.json({ success: true, referral })

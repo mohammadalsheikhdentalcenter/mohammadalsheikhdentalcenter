@@ -247,6 +247,21 @@ export default function ClinicalToolsPage() {
     })
   }
 
+  const handleToothStatusChange = (toothNumber: number, newStatus: string) => {
+    if (!toothChart) return
+    setToothChart({
+      ...toothChart,
+      teeth: {
+        ...(toothChart.teeth || {}),
+        [toothNumber]: {
+          ...(toothChart.teeth?.[toothNumber] || {}),
+          status: newStatus,
+          lastUpdated: new Date(),
+        },
+      },
+    })
+  }
+
   const handleSaveToothChart = async () => {
     if (!toothChart) return
     setLoading((prev) => ({ ...prev, saveChart: true }))
@@ -737,7 +752,11 @@ export default function ClinicalToolsPage() {
                               </button>
                             </div>
 
-                            <ToothChartVisual teeth={toothChart.teeth || {}} onToothClick={handleToothClick} />
+                            <ToothChartVisual
+                              teeth={toothChart.teeth || {}}
+                              onToothClick={handleToothClick}
+                              onToothStatusChange={handleToothStatusChange}
+                            />
 
                             <div className="mt-4 sm:mt-6">
                               <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
@@ -962,7 +981,7 @@ export default function ClinicalToolsPage() {
                                       )}
                                       {entry.createdByName && (
                                         <div className="mt-1 sm:mt-2 pt-1 border-t border-border">
-                                          <p className="text-xs text-muted-foreground">by Dr. {entry.createdByName}</p>
+                                          <p className="text-xs text-muted-foreground">by {entry.createdByName}</p>
                                         </div>
                                       )}
                                     </>

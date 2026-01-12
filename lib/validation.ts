@@ -1,6 +1,6 @@
 export interface PatientCredentials {
   idNumber?: string
-  phone?: string
+  phones?: Array<{ number?: string; isPrimary?: boolean }> // Updated to accept phones array
   email?: string
   insuranceProvider?: string
   insuranceNumber?: string
@@ -25,9 +25,17 @@ export function validatePatientCredentials(credentials: PatientCredentials): Cre
   if (!credentials.idNumber?.trim()) {
     missingCredentials.push("ID Number")
   }
-  if (!credentials.phone?.trim()) {
+  
+  // For phones, check if array exists and has at least one valid phone
+  const validPhones = credentials.phones?.filter((p) => {
+    const phoneNumber = p?.number?.trim()
+    return phoneNumber && phoneNumber !== "" && validatePhone(phoneNumber)
+  }) || []
+  
+  if (validPhones.length === 0) {
     missingCredentials.push("Phone Number")
   }
+  
   if (!credentials.dob?.trim()) {
     missingCredentials.push("Date of Birth")
   }
@@ -51,11 +59,13 @@ export function validatePatientCredentials(credentials: PatientCredentials): Cre
 }
 
 export function validateEmail(email: string): boolean {
+  if (!email || email.trim() === "") return false
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   return re.test(email)
 }
 
 export function validatePassword(password: string): boolean {
+  if (!password || password.trim() === "") return false
   // Enhanced password validation: at least 8 chars, 1 uppercase, 1 number, 1 special char
   const re = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
   return re.test(password)
@@ -88,15 +98,45 @@ export function generateStrongPassword(): string {
     .join("")
 }
 
-export function validatePhone(phone: string): boolean {
-  const re = /^[\d\s\-+$$$$]{10,}$/
-  return re.test(phone)
+export function validatePhone(phone?: string): boolean {
+  if (!phone || phone.trim() === "") {
+    return false
+  }
+  // Phone must start with + and have digits after
+  const phoneStr = String(phone).trim()
+  
+  if (!phoneStr.startsWith("+")) {
+    return false
+  }
+  
+  const digitsOnly = phoneStr.slice(1)
+  if (!/^\d+$/.test(digitsOnly)) {
+    return false
+  }
+  
+  if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+    return false
+  }
+  
+  return true
 }
 
-export function formatPhoneForDisplay(phone: string): string {
+export function formatPhoneForDisplay(phone?: string): string {
+  // Handle undefined, null, or empty string
+  if (!phone || phone.trim() === "") {
+    return "Not provided"
+  }
+  
+  const phoneStr = String(phone).trim()
+  
   // Remove all non-digit characters except +
-  const cleaned = phone.replace(/[^\d+]/g, "")
-
+  const cleaned = phoneStr.replace(/[^\d+]/g, "")
+  
+  // If it's empty after cleaning
+  if (cleaned === "") {
+    return "Not provided"
+  }
+  
   // If it starts with +, keep it; otherwise add +
   if (cleaned.startsWith("+")) {
     return cleaned
@@ -104,20 +144,129 @@ export function formatPhoneForDisplay(phone: string): string {
   return "+" + cleaned
 }
 
-export function formatPhoneForDatabase(phone: string): string {
-  // Remove all non-digit characters (remove the + sign)
-  return phone.replace(/[^\d]/g, "")
+export function formatPhoneForDatabase(phone?: string): string {
+  // Handle undefined, null, or empty string
+  if (!phone || phone.trim() === "") {
+    return ""
+  }
+  
+  const phoneStr = String(phone).trim()
+  
+  // Remove all non-digit characters except +
+  const withPlus = phoneStr.replace(/[^\d+]/g, "")
+  
+  // If it's empty after cleaning
+  if (withPlus === "") {
+    return ""
+  }
+  
+  // Ensure it starts with +
+  if (withPlus.startsWith("+")) {
+    return withPlus
+  }
+  return "+" + withPlus
 }
 
-export function formatDate(date: Date | string): string {
-  const d = new Date(date)
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+export function formatDate(date?: Date | string | null): string {
+  if (!date) return "Not set"
+  
+  try {
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return "Invalid date"
+    return d.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+  } catch {
+    return "Invalid date"
+  }
 }
 
-export function formatTime(time: string): string {
-  const [hours, minutes] = time.split(":")
-  const hour = Number.parseInt(hours)
-  const ampm = hour >= 12 ? "PM" : "AM"
-  const displayHour = hour % 12 || 12
-  return `${displayHour}:${minutes} ${ampm}`
+export function formatTime(time?: string): string {
+  if (!time || time.trim() === "") return "Not set"
+  
+  try {
+    const [hours, minutes] = time.split(":")
+    const hour = Number.parseInt(hours)
+    if (isNaN(hour)) return "Invalid time"
+    
+    const ampm = hour >= 12 ? "PM" : "AM"
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes || "00"} ${ampm}`
+  } catch {
+    return "Invalid time"
+  }
+}
+
+// Helper function for phone validation with detailed error messages
+export function validatePhoneWithDetails(phone?: string): { valid: boolean; error?: string } {
+  if (!phone || phone.trim() === "") {
+    return { valid: false, error: "Phone number is required" }
+  }
+
+  const phoneStr = String(phone).trim()
+
+  if (phoneStr === "") {
+    return { valid: false, error: "Phone number is required" }
+  }
+
+  // Check if it starts with +
+  if (!phoneStr.startsWith("+")) {
+    return {
+      valid: false,
+      error: "Phone must start with + (country code, e.g., +1234567890)",
+    }
+  }
+
+  // Get digits after +
+  const digitsOnly = phoneStr.slice(1)
+
+  // Check if contains only digits
+  if (!/^\d+$/.test(digitsOnly)) {
+    return { valid: false, error: "Phone must contain only digits after +" }
+  }
+
+  // Check length
+  if (digitsOnly.length < 10 || digitsOnly.length > 15) {
+    return { valid: false, error: "Phone must be 10-15 digits after +" }
+  }
+
+  return { valid: true }
+}
+
+// Helper function to validate multiple phone numbers in an array
+export function validatePhonesArray(phones: Array<{ number?: string; isPrimary?: boolean }>): { valid: boolean; errors: string[] } {
+  const errors: string[] = []
+  
+  if (!phones || phones.length === 0) {
+    return { valid: false, errors: ["At least one phone number is required"] }
+  }
+  
+  let hasPrimary = false
+  let hasValidPhone = false
+  
+  for (let i = 0; i < phones.length; i++) {
+    const phone = phones[i]
+    const validation = validatePhoneWithDetails(phone?.number)
+    
+    if (!validation.valid) {
+      errors.push(`Phone ${i + 1}: ${validation.error}`)
+    } else {
+      hasValidPhone = true
+    }
+    
+    if (phone?.isPrimary) {
+      hasPrimary = true
+    }
+  }
+  
+  if (!hasValidPhone) {
+    errors.push("No valid phone numbers provided")
+  }
+  
+  if (!hasPrimary) {
+    errors.push("At least one phone must be marked as primary")
+  }
+  
+  return {
+    valid: errors.length === 0,
+    errors
+  }
 }
