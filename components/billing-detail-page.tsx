@@ -1,10 +1,19 @@
 //@ts-nocheck
 "use client"
-
 import { useState, useEffect } from "react"
 import { useAuth } from "@/components/auth-context"
 import { toast } from "react-hot-toast"
-import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, Eye } from "lucide-react"
+import {
+  ArrowLeft,
+  Plus,
+  Loader2,
+  CreditCard,
+  FileText,
+  DollarSign,
+  User,
+  Phone,
+  Eye,
+} from "lucide-react"
 import { AddDebtModal } from "@/components/add-debt-modal"
 import { AddPaymentModal } from "@/components/add-payment-modal"
 import { ToothChartVisual } from "@/components/tooth-chart-visual"
@@ -33,29 +42,21 @@ export function BillingDetailPage({ patient, onBack }: any) {
   }, [token, patient?.patientId])
 
   const fetchTransactions = async () => {
-    if (!patient?.patientId) {
-      console.error("[v0] No patientId available")
-      return
-    }
+    if (!patient?.patientId) return
 
     setLoading(true)
     try {
-      console.log("[v0] Fetching transactions for patient:", patient.patientId)
       const res = await fetch(`/api/billing/${patient.patientId}/transactions`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
         const data = await res.json()
-        console.log("[v0] Received billing data:", data)
         setBillings(data.billings || [])
         setStats(data.stats || { totalPaid: 0, totalDebt: 0, remainingBalance: 0 })
       } else {
-        const errorData = await res.json()
-        console.error("[v0] Failed to fetch transactions:", errorData)
         toast.error("Failed to load billing data")
       }
     } catch (error) {
-      console.error("[v0] Failed to fetch transactions:", error)
       toast.error("Failed to load billing data")
     } finally {
       setLoading(false)
@@ -88,7 +89,6 @@ export function BillingDetailPage({ patient, onBack }: any) {
         toast.error("Failed to load tooth chart")
       }
     } catch (error) {
-      console.error("Error fetching tooth chart:", error)
       toast.error("Error loading tooth chart")
     } finally {
       setToothChartLoading(false)
@@ -98,9 +98,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
   return (
     <div className="min-h-screen bg-background">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-        {/* Header with Back and Action Buttons */}
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-4 sm:gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <button
               onClick={onBack}
               className="group flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors duration-200 font-medium w-fit cursor-pointer"
@@ -109,51 +109,51 @@ export function BillingDetailPage({ patient, onBack }: any) {
               Back to Patients
             </button>
 
-            {/* Action Buttons in Header */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleViewToothChart}
-                disabled={toothChartLoading}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md active:scale-95 cursor-pointer"
-              >
-                <Eye className="w-4 h-4" />
-                {toothChartLoading ? "Loading..." : "View Tooth Chart"}
-              </button>
-              <button
-                onClick={() => setShowAddDebt(true)}
-                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2.5 rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md active:scale-95 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Add Debt
-              </button>
-              <button
-                onClick={() => setShowAddPayment(true)}
-                className="flex items-center gap-2 bg-accent hover:bg-accent/90 text-accent-foreground px-4 py-2.5 rounded-lg transition-all duration-200 font-medium shadow-sm hover:shadow-md active:scale-95 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                Add Payment
-              </button>
-            </div>
+            <div className="flex flex-col sm:flex-row sm:gap-3 gap-2 w-full">
+  <button
+    onClick={handleViewToothChart}
+    disabled={toothChartLoading}
+    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
+  >
+    <Eye className="w-4 h-4" />
+    {toothChartLoading ? "Loading..." : "View Tooth Chart"}
+  </button>
+
+  <button
+    onClick={() => setShowAddDebt(true)}
+    className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
+  >
+    <Plus className="w-4 h-4" />
+    Add Debt
+  </button>
+
+  <button
+    onClick={() => setShowAddPayment(true)}
+    className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
+  >
+    <Plus className="w-4 h-4" />
+    Add Payment
+  </button>
+</div>
+
           </div>
 
-          {/* Patient Header */}
-          <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <User className="w-6 h-6 text-primary" />
-              </div>
-              <div className="flex-1">
-                <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{patient?.name || "Unknown Patient"}</h1>
-                <div className="flex flex-wrap items-center gap-3 mt-2">
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Phone className="w-3.5 h-3.5" />
-                    {patient?.phones?.find((p: any) => p.isPrimary)?.number || patient?.phone || "No phone"}
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <span className="text-xs font-medium px-2 py-1 bg-muted rounded">
-                      ID: {patient?.patientId || "N/A"}
-                    </span>
-                  </div>
+          {/* Patient Info */}
+          <div className="bg-card rounded-xl border border-border p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="p-3 bg-primary/10 rounded-lg flex-shrink-0">
+              <User className="w-6 h-6 text-primary" />
+            </div>
+            <div className="flex-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">{patient?.name || "Unknown Patient"}</h1>
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <Phone className="w-3.5 h-3.5" />
+                  {patient?.phones?.find((p: any) => p.isPrimary)?.number || patient?.phone || "No phone"}
+                </div>
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                  <span className="text-xs font-medium px-2 py-1 bg-muted rounded">
+                    ID: {patient?.patientId || "N/A"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -168,15 +168,14 @@ export function BillingDetailPage({ patient, onBack }: any) {
           </div>
         ) : (
           <>
-            {/* Chart and Stats */}
+            {/* Charts and Stats */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              {/* Chart Section */}
               <div className="lg:col-span-2">
                 <BillingChart stats={stats} />
               </div>
 
-              {/* Stats Cards */}
               <div className="space-y-4">
+                {/* Total Paid */}
                 <div className="bg-card rounded-xl border border-border p-5 hover:border-primary/50 transition-colors duration-200">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -199,6 +198,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
                   </div>
                 </div>
 
+                {/* Total Debt */}
                 <div className="bg-card rounded-xl border border-border p-5 hover:border-primary/50 transition-colors duration-200">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
@@ -213,6 +213,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
                   </div>
                 </div>
 
+                {/* Remaining Balance */}
                 <div
                   className={`bg-card rounded-xl border p-5 hover:border-primary/50 transition-colors duration-200 ${
                     (stats?.remainingBalance || 0) > 0 ? "border-destructive/20" : "border-accent/20"
@@ -262,17 +263,18 @@ export function BillingDetailPage({ patient, onBack }: any) {
             </div>
 
             {/* Payment History */}
-            <div className="bg-card rounded-xl border border-border shadow-sm">
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
               <PaymentHistory billings={billings} patient={patient} />
             </div>
           </>
         )}
 
+        {/* Tooth Chart Modal */}
         {showToothChart && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-card rounded-lg border border-border p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-foreground">Tooth Chart - {patient?.name}</h2>
+            <div className="bg-card rounded-lg border border-border p-4 sm:p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Tooth Chart - {patient?.name}</h2>
                 <button
                   onClick={() => setShowToothChart(false)}
                   className="text-muted-foreground hover:text-foreground transition-colors"
