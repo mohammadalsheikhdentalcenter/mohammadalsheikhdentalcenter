@@ -2,7 +2,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { Appointment, connectDB, User, Patient, AppointmentReferral } from "@/lib/db-server"
 import { verifyToken, verifyPatientToken } from "@/lib/auth"
-import { sendAppointmentConfirmationArabic, getAllPhoneNumbers } from "@/lib/whatsapp-service"
+import { sendAppointmentConfirmationArabic, getAllPhoneNumbers, sendAppointmentConfirmation } from "@/lib/whatsapp-service"
 import { validateAppointmentSchedulingServer } from "@/lib/appointment-validation-server"
 import { sendAppointmentConfirmationEmail } from "@/lib/nodemailer-service"
 
@@ -209,30 +209,55 @@ export async function POST(request: NextRequest) {
 
     if (patient && allPhoneNumbers.length > 0) {
       const appointmentId = newAppointment._id.toString()
-      console.log("[DEBUG] Sending WhatsApp Arabic confirmation to all numbers:", {
+      
+      console.log("[DEBUG] Sending WhatsApp BILINGUAL confirmation to all numbers:", {
         phones: allPhoneNumbers,
         patientName,
-        type,
         date,
         time,
         doctorName,
         appointmentId,
       })
 
-      const whatsappResult = await sendAppointmentConfirmationArabic(
-        allPhoneNumbers,
+      // Send English template first
+      const whatsappResultEnglish = await sendAppointmentConfirmation(
+        allPhoneNumbers,  // Send to all phone numbers, not just primary
+        patientName,
+        date,
+        time,
+        doctorName,
+      )
+
+      console.log("[v0] ✅ ENGLISH CONFIRMATION TEMPLATE: WhatsApp result:", whatsappResultEnglish)
+
+      // Then send Arabic template
+      const whatsappResultArabic = await sendAppointmentConfirmationArabic(
+        allPhoneNumbers,  // Send to all phone numbers
         date,
         time,
         doctorName,
         patientName,
       )
 
-      console.log("[v0] ✅ ARABIC CONFIRMATION TEMPLATE: WhatsApp result:", whatsappResult)
+      console.log("[v0] ✅ ARABIC CONFIRMATION TEMPLATE: WhatsApp result:", whatsappResultArabic)
 
-      if (!whatsappResult.success) {
-        console.warn("[v0] ⚠️ ARABIC CONFIRMATION TEMPLATE FAILED:", whatsappResult.error)
+      // Check results
+      const englishSuccess = whatsappResultEnglish.success
+      const arabicSuccess = whatsappResultArabic.success
+
+      if (!englishSuccess && !arabicSuccess) {
+        console.warn("[v0] ⚠️ BOTH TEMPLATES FAILED:", {
+          englishError: whatsappResultEnglish.error,
+          arabicError: whatsappResultArabic.error,
+        })
+      } else if (!englishSuccess) {
+        console.warn("[v0] ⚠️ ENGLISH TEMPLATE FAILED:", whatsappResultEnglish.error)
+        console.log("[v0] ✅ ARABIC TEMPLATE SENT successfully")
+      } else if (!arabicSuccess) {
+        console.warn("[v0] ⚠️ ARABIC TEMPLATE FAILED:", whatsappResultArabic.error)
+        console.log("[v0] ✅ ENGLISH TEMPLATE SENT successfully")
       } else {
-        console.log("[v0] ✅ ARABIC CONFIRMATION TEMPLATE SENT successfully with messageId:", whatsappResult.messageId)
+        console.log("[v0] ✅ BOTH ENGLISH AND ARABIC TEMPLATES SENT successfully")
       }
     } else {
       console.warn("[DEBUG] Patient phone numbers missing — WhatsApp message skipped")
