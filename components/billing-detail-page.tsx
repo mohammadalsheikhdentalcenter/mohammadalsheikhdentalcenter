@@ -3,19 +3,10 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/components/auth-context"
 import { toast } from "react-hot-toast"
-import {
-  ArrowLeft,
-  Plus,
-  Loader2,
-  CreditCard,
-  FileText,
-  DollarSign,
-  User,
-  Phone,
-  Eye,
-} from "lucide-react"
+import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, Eye, Stethoscope } from "lucide-react"
 import { AddDebtModal } from "@/components/add-debt-modal"
 import { AddPaymentModal } from "@/components/add-payment-modal"
+import { ProceduresFindingsModal } from "@/components/procedures-findings-modal"
 import { ToothChartVisual } from "@/components/tooth-chart-visual"
 import { PaymentHistory } from "./payment-history"
 import { BillingChart } from "./billing-chart"
@@ -31,6 +22,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
   const [loading, setLoading] = useState(false)
   const [showAddDebt, setShowAddDebt] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
+  const [showProceduresFinding, setShowProceduresFinding] = useState(false)
   const [showToothChart, setShowToothChart] = useState(false)
   const [toothChartData, setToothChartData] = useState(null)
   const [toothChartLoading, setToothChartLoading] = useState(false)
@@ -65,14 +57,18 @@ export function BillingDetailPage({ patient, onBack }: any) {
 
   const handleDebtAdded = () => {
     setShowAddDebt(false)
-    fetchTransactions()
     toast.success("Debt added successfully")
+    setTimeout(() => {
+      fetchTransactions()
+    }, 300)
   }
 
   const handlePaymentAdded = () => {
     setShowAddPayment(false)
-    fetchTransactions()
-    toast.success("Payment recorded successfully")
+    // toast.success("Payment recorded successfully")
+    setTimeout(() => {
+      fetchTransactions()
+    }, 300)
   }
 
   const handleViewToothChart = async () => {
@@ -105,37 +101,43 @@ export function BillingDetailPage({ patient, onBack }: any) {
               onClick={onBack}
               className="group flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors duration-200 font-medium w-fit cursor-pointer"
             >
-              <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-0.5 duration-200" />
-              Back to Patients
+              <ArrowLeft className="w-7 h-5 transition-transform group-hover:-translate-x-0.5 duration-200" />
+              Back
             </button>
 
-            <div className="flex flex-col sm:flex-row sm:gap-3 gap-2 w-full">
-  <button
-    onClick={handleViewToothChart}
-    disabled={toothChartLoading}
-    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
-  >
-    <Eye className="w-4 h-4" />
-    {toothChartLoading ? "Loading..." : "View Tooth Chart"}
-  </button>
+            <div className="flex flex-col sm:flex-row sm:gap-2 gap-2 w-full justify-end">
+              <button
+                onClick={handleViewToothChart}
+                disabled={toothChartLoading}
+                className="flex items-center justify-center gap-2 bg-muted hover:bg-muted border border-border text-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer"
+              >
+                <Eye className="w-4 h-4" />
+                {toothChartLoading ? "Loading..." : "ToothChart"}
+              </button>
+              <button
+                onClick={() => setShowProceduresFinding(true)}
+                className="flex items-center justify-center gap-2 bg-muted hover:bg-muted border border-border text-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 !test-xs cursor-pointer"
+              >
+                <Stethoscope className="w-4 h-4" />
+                Procedures & Findings
+              </button>
 
-  <button
-    onClick={() => setShowAddDebt(true)}
-    className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
-  >
-    <Plus className="w-4 h-4" />
-    Add Debt
-  </button>
+              <button
+                onClick={() => setShowAddDebt(true)}
+                className="flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Add Debt
+              </button>
 
-  <button
-    onClick={() => setShowAddPayment(true)}
-    className="flex-1 flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200"
-  >
-    <Plus className="w-4 h-4" />
-    Add Payment
-  </button>
-</div>
-
+              <button
+                onClick={() => setShowAddPayment(true)}
+                className="flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 text-accent-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                Add Payment
+              </button>
+            </div>
           </div>
 
           {/* Patient Info */}
@@ -315,6 +317,11 @@ export function BillingDetailPage({ patient, onBack }: any) {
               isOpen={showAddPayment}
               onClose={() => setShowAddPayment(false)}
               onSuccess={handlePaymentAdded}
+            />
+            <ProceduresFindingsModal
+              patientId={patient.patientId}
+              isOpen={showProceduresFinding}
+              onClose={() => setShowProceduresFinding(false)}
             />
           </>
         )}

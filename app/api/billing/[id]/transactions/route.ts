@@ -13,14 +13,21 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const patientId = params.id
     console.log("[v0] Fetching transactions for patientId:", patientId)
-    
+
     const billings = await Billing.find({ patientId }).sort({ createdAt: -1 })
     console.log("[v0] Found billings count:", billings.length)
 
     // Calculate totals
     const totalPaid = billings.reduce((sum: number, b: any) => sum + (b.paidAmount || 0), 0)
+    // This ensures payments and debts are tracked independently per record
     const totalDebt = billings.reduce((sum: number, b: any) => sum + (b.totalAmount || 0), 0)
-    const remainingBalance = totalDebt - totalPaid
+
+    // Calculate remaining unpaid debt across all records
+    const remainingBalance = billings.reduce((sum: number, b: any) => {
+      // For each billing record: debt - what's paid on this specific record
+      const unpaidOnThisRecord = Math.max(0, (b.totalAmount || 0) - (b.paidAmount || 0))
+      return sum + unpaidOnThisRecord
+    }, 0)
 
     console.log("[v0] Calculated stats:", { totalPaid, totalDebt, remainingBalance })
 

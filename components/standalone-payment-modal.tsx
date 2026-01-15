@@ -8,10 +8,9 @@ import { toast } from "react-hot-toast"
 import { Loader2 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 
-export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, onSuccess }: any) {
+export function StandalonePaymentModal({ patientId, isOpen, onClose, onSuccess }: any) {
   const { token } = useAuth()
   const [loading, setLoading] = useState(false)
-  const [withoutDebt, setWithoutDebt] = useState(false)
   const [formData, setFormData] = useState({
     cash: "",
     card: "",
@@ -38,11 +37,7 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
     setLoading(true)
 
     try {
-      const endpoint = withoutDebt
-        ? `/api/billing/${patientId}/standalone-payment`
-        : `/api/billing/${patientId}/payment`
-
-      const res = await fetch(endpoint, {
+      const res = await fetch(`/api/billing/${patientId}/standalone-payment`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -64,7 +59,6 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
       if (res.ok) {
         onClose()
         onSuccess()
-
         setFormData({
           cash: "",
           card: "",
@@ -73,7 +67,6 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
           description: "",
           date: new Date().toISOString().split("T")[0],
         })
-        setWithoutDebt(false)
         toast.success("Payment recorded successfully")
       } else {
         const data = await res.json()
@@ -90,28 +83,15 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md w-[95vw] sm:w-full p-4 sm:p-6 max-h-[85vh] overflow-y-auto">
-        <DialogHeader className="mb-4">
-          <DialogTitle className="text-lg sm:text-xl">Add Payment</DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground mt-2">
-            {withoutDebt
-              ? "Record a payment without creating or affecting debt entries"
-              : "Record a payment against existing debt"}
-          </DialogDescription>
+        <DialogHeader className="mb-6">
+          <DialogTitle className="text-lg sm:text-xl">Add Standalone Payment</DialogTitle>
+          <DialogDescription className="sr-only">Record a payment without creating debt</DialogDescription>
         </DialogHeader>
 
-        <div className="mb-6 p-3 bg-muted rounded-lg border border-border">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={withoutDebt}
-              onChange={(e) => setWithoutDebt(e.target.checked)}
-              disabled={loading}
-              className="w-4 h-4 rounded border-border cursor-pointer accent-accent"
-            />
-            <span className="text-sm font-medium text-foreground">Record without creating debt</span>
-          </label>
-          <p className="text-xs text-muted-foreground mt-2 ml-7">
-            Check this if the patient is making a direct payment without any outstanding debt
+        <div className="bg-accent/5 border border-accent/20 p-4 rounded-lg mb-6">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Note</p>
+          <p className="text-sm text-muted-foreground">
+            This payment is recorded independently without creating or affecting debt entries.
           </p>
         </div>
 
@@ -137,15 +117,14 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
                     placeholder="0.00"
                     step="0.01"
                     min="0"
-                    disabled={loading}
-                    className="w-full pl-8 pr-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent text-foreground disabled:opacity-50"
+                    className="w-full pl-8 pr-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
                   />
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Total Amount */}
+          {/* Total and Description */}
           <div className="bg-accent/5 border border-accent/20 p-3 rounded-lg my-4">
             <div className="flex justify-between items-center">
               <span className="text-sm font-medium text-foreground">Total Payment:</span>
@@ -159,9 +138,8 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="e.g., Payment for routine checkup..."
-              disabled={loading}
-              className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent text-foreground placeholder-muted-foreground disabled:opacity-50"
+              placeholder="e.g., Direct payment from patient..."
+              className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground"
             />
           </div>
 
@@ -171,8 +149,7 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
               type="date"
               value={formData.date}
               onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              disabled={loading}
-              className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent text-foreground disabled:opacity-50"
+              className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground"
             />
           </div>
 
@@ -189,7 +166,7 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-muted hover:bg-muted/80 disabled:opacity-50 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
             >
               Cancel
             </button>

@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
       const patientBillings = billings.filter((b: any) => b.patientId === patient._id.toString())
       const totalPaid = patientBillings.reduce((sum: number, b: any) => sum + (b.paidAmount || 0), 0)
       const totalDebt = patientBillings.reduce((sum: number, b: any) => sum + (b.totalAmount || 0), 0)
-      const remainingBalance = totalDebt - totalPaid
-      
-      const paymentPercentage = totalDebt > 0 ? (totalPaid / totalDebt) * 100 : 0
+      const remainingBalance = Math.max(0, totalDebt - totalPaid)
+
+      const paymentPercentage = totalDebt > 0 ? Math.min(100, (totalPaid / totalDebt) * 100) : 0
 
       return {
         patientId: patient._id,
