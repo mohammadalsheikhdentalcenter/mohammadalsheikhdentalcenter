@@ -1,33 +1,32 @@
 import { connectDB, WhatsAppMessage, WhatsAppChat, User } from "@/lib/db-server"
 import { NextRequest, NextResponse } from "next/server"
-import jwt from "jsonwebtoken"
+import { verifyToken } from "@/lib/auth"
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || ""
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || ""
 
-// Verify user is admin or receptionist
-async function verifyAuth(req: NextRequest) {
-  const token = req.headers.get("Authorization")?.split(" ")[1]
-  if (!token) return null
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    const user = await User.findById(decoded.id)
-    if (user && (user.role === "admin" || user.role === "receptionist")) {
-      return user
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 // GET /api/whatsapp/messages?chatId=xxx - Get messages for a chat
 export async function GET(req: NextRequest) {
   try {
-    const user = await verifyAuth(req)
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    await connectDB()
+           const token = req.headers.get("authorization")?.split(" ")[1]
+       
+           if (!token) {
+             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+           }
+       
+           const payload = verifyToken(token)
+           if (!payload) {
+             return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+           }
+       
+           if (payload.role !== "admin" && payload.role !== "receptionist") {
+             return NextResponse.json({ error: "Access denied" }, { status: 403 })
+           }
+   
 
     await connectDB()
 
@@ -78,10 +77,23 @@ export async function GET(req: NextRequest) {
 // POST /api/whatsapp/messages - Send message to patient via WhatsApp Cloud API
 export async function POST(req: NextRequest) {
   try {
-    const user = await verifyAuth(req)
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+     await connectDB()
+        const token = req.headers.get("authorization")?.split(" ")[1]
+    
+        if (!token) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+    
+        const payload = verifyToken(token)
+        if (!payload) {
+          return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+        }
+    
+        if (payload.role !== "admin" && payload.role !== "receptionist") {
+          return NextResponse.json({ error: "Access denied" }, { status: 403 })
+        }
 
-    await connectDB()
+  const user = verifyToken(token!)
 
     const {
       chatId,

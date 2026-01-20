@@ -4,21 +4,7 @@ import { verifyToken } from "@/lib/auth"
 
 
 // Verify user is admin or receptionist
-async function verifyAuth(req: NextRequest) {
-  const token = req.headers.get("Authorization")?.split(" ")[1]
-  if (!token) return null
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
-    const user = await User.findById(decoded.id)
-    if (user && (user.role === "admin" || user.role === "receptionist")) {
-      return user
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 // GET /api/whatsapp/chats/[chatId] - Get specific chat with all details
 export async function GET(req: NextRequest, { params }: { params: { chatId: string } }) {
@@ -35,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: { chatId: stri
           return NextResponse.json({ error: "Invalid token" }, { status: 401 })
         }
     
-        if (payload.role !== "admin" && payload.role !== "hr") {
+        if (payload.role !== "admin" && payload.role !== "receptionist") {
           return NextResponse.json({ error: "Access denied" }, { status: 403 })
         }
 
@@ -78,8 +64,22 @@ export async function GET(req: NextRequest, { params }: { params: { chatId: stri
 // PATCH /api/whatsapp/chats/[chatId] - Update chat status
 export async function PATCH(req: NextRequest, { params }: { params: { chatId: string } }) {
   try {
-    const user = await verifyAuth(req)
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+     await connectDB()
+        const token = req.headers.get("authorization")?.split(" ")[1]
+    
+        if (!token) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+    
+        const payload = verifyToken(token)
+        if (!payload) {
+          return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+        }
+    
+        if (payload.role !== "admin" && payload.role !== "receptionist") {
+          return NextResponse.json({ error: "Access denied" }, { status: 403 })
+        }
+
 
     await connectDB()
 
