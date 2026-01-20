@@ -1,34 +1,31 @@
-import { connectDB, WhatsAppMessage, WhatsAppChat, User } from "@/lib/db-server"
+import { connectDB, WhatsAppMessage, WhatsAppChat, User, Patient } from "@/lib/db-server"
 import { NextRequest, NextResponse } from "next/server"
 import { verifyToken } from "@/lib/auth"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || ""
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || ""
 
-
-
-// GET /api/whatsapp/messages?chatId=xxx - Get messages for a chat
+// ============================
+// GET MESSAGES
+// ============================
 export async function GET(req: NextRequest) {
   try {
     await connectDB()
-           const token = req.headers.get("authorization")?.split(" ")[1]
-       
-           if (!token) {
-             return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-           }
-       
-           const payload = verifyToken(token)
-           if (!payload) {
-             return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-           }
-       
-           if (payload.role !== "admin" && payload.role !== "receptionist") {
-             return NextResponse.json({ error: "Access denied" }, { status: 403 })
-           }
-   
 
-    await connectDB()
+    const token = req.headers.get("authorization")?.split(" ")[1]
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const payload = verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
+    if (payload.role !== "admin" && payload.role !== "receptionist") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
 
     const { searchParams } = new URL(req.url)
     const chatId = searchParams.get("chatId")
@@ -46,13 +43,11 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .lean()
 
-    // Mark messages as read
     await WhatsAppMessage.updateMany(
       { chatId, senderType: "patient", status: { $in: ["sent", "delivered"] } },
       { status: "read", statusChangedAt: new Date() },
     )
 
-    // Update chat unread count
     const unreadCount = await WhatsAppMessage.countDocuments({
       chatId,
       senderType: "patient",
@@ -74,35 +69,39 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/whatsapp/messages - Send message to patient via WhatsApp Cloud API
+// ============================
+// POST SEND MESSAGE
+// ============================
 export async function POST(req: NextRequest) {
   try {
-     await connectDB()
-        const token = req.headers.get("authorization")?.split(" ")[1]
-    
-        if (!token) {
-          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-        }
-    
-        const payload = verifyToken(token)
-        if (!payload) {
-          return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-        }
-    
-        if (payload.role !== "admin" && payload.role !== "receptionist") {
-          return NextResponse.json({ error: "Access denied" }, { status: 403 })
-        }
+    await connectDB()
 
-  const user = verifyToken(token!)
+    const token = req.headers.get("authorization")?.split(" ")[1]
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const payload = verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
+    if (payload.role !== "admin" && payload.role !== "receptionist") {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
+
+    const user = payload
+
+    const body = await req.json()
 
     const {
       chatId,
-      patientId,
       patientPhone,
       message,
       messageType = "text",
       whatsappBusinessPhoneNumberId,
-    } = await req.json()
+    } = body
 
     if (!chatId || !patientPhone || !message || !whatsappBusinessPhoneNumberId) {
       return NextResponse.json(
@@ -111,36 +110,63 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Check 24-hour window
     const chat = await WhatsAppChat.findById(chatId)
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 })
     }
 
+    const normalizedPhone = patientPhone.startsWith("+")
+      ? patientPhone
+      : `+${patientPhone}`
+
+    // ============================
+    // RESOLVE PATIENT SAFELY
+    // ============================
+    let resolvedPatientId = chat.patientId || null
+
+    if (!resolvedPatientId) {
+      const patient = await Patient.findOne({
+        "phones.number": normalizedPhone,
+      })
+
+      if (patient) {
+        resolvedPatientId = patient._id
+
+        await WhatsAppChat.findByIdAndUpdate(chatId, {
+          patientId: patient._id,
+          patientName: patient.name,
+        })
+      }
+    }
+
     const now = new Date()
     const window24HourValid = !chat.window24HourEndsAt || now < new Date(chat.window24HourEndsAt)
 
-    // Save message to database FIRST
+    // ============================
+    // SAVE MESSAGE FIRST
+    // ============================
     const messageDoc = await WhatsAppMessage.create({
       chatId,
-      patientId,
-      patientPhone,
+      patientId: resolvedPatientId,
+      patientPhone: normalizedPhone,
       senderType: "business",
       senderName: user.name,
       messageType,
       body: message,
-      sentBy: user._id,
+      sentBy: user.userId,
       sentByName: user.name,
       window24HourValid,
       status: "sent",
       createdAt: new Date(),
     })
 
-    // Send via WhatsApp Cloud API
+    // ============================
+    // SEND TO WHATSAPP
+    // ============================
     try {
       const payload = {
         messaging_product: "whatsapp",
-        to: patientPhone,
+        to: normalizedPhone.replace("+", ""),
         type: "text",
         text: {
           preview_url: true,
@@ -162,13 +188,11 @@ export async function POST(req: NextRequest) {
       if (response.ok && data.messages?.[0]?.id) {
         const whatsappMessageId = data.messages[0].id
 
-        // Update message with WhatsApp ID
         await WhatsAppMessage.findByIdAndUpdate(messageDoc._id, {
           whatsappMessageId,
           status: "sent",
         })
 
-        // Update chat
         await WhatsAppChat.findByIdAndUpdate(chatId, {
           lastMessage: message,
           lastMessageAt: new Date(),
@@ -186,7 +210,6 @@ export async function POST(req: NextRequest) {
           { status: 201 },
         )
       } else {
-        // Update message status to failed
         await WhatsAppMessage.findByIdAndUpdate(messageDoc._id, {
           status: "failed",
           errorMessage: data.error?.message || "Failed to send message",
@@ -205,7 +228,6 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       console.error("[v0] WhatsApp API error:", error)
 
-      // Update message status to failed
       await WhatsAppMessage.findByIdAndUpdate(messageDoc._id, {
         status: "failed",
         errorMessage: error instanceof Error ? error.message : "Network error",
