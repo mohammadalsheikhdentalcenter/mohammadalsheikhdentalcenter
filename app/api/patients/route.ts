@@ -453,4 +453,3 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     return NextResponse.json({ error: "Failed to delete patient" }, { status: 500 })
   }
 }
-
