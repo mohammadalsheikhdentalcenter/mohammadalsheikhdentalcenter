@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     console.log("[v0] WhatsApp Webhook received:", JSON.stringify(body, null, 2))
 
-    // Validate webhook format
     if (body.object !== "whatsapp_business_account") {
       return NextResponse.json({ success: true }, { status: 200 })
     }
@@ -47,12 +46,10 @@ export async function POST(req: NextRequest) {
         const messages = value.messages || []
         const statuses = value.statuses || []
 
-        // Handle incoming messages from patients
         for (const message of messages) {
           await handleIncomingMessage(message, value)
         }
 
-        // Handle message status updates (delivered, read, failed)
         for (const status of statuses) {
           await handleStatusUpdate(status)
         }
@@ -62,7 +59,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
     console.error("[v0] WhatsApp webhook POST error:", error)
-    // Always return 200 to prevent webhook retries
     return NextResponse.json({ success: true }, { status: 200 })
   }
 }
@@ -71,8 +67,8 @@ async function handleIncomingMessage(message: any, valueContext: any) {
   try {
     const messageId = message.id
     const timestamp = message.timestamp
-    const from = message.from // Patient's phone number
-    const type = message.type // "text", "image", "document", etc.
+    const from = message.from
+    const type = message.type
 
     console.log("[v0] Processing incoming message:", {
       messageId,
@@ -80,7 +76,13 @@ async function handleIncomingMessage(message: any, valueContext: any) {
       type,
     })
 
-    // Get message content based on type
+    // Prevent duplicates
+    const exists = await WhatsAppMessage.findOne({ whatsappMessageId: messageId })
+    if (exists) {
+      console.log("[v0] Duplicate message ignored:", messageId)
+      return
+    }
+
     let messageBody = ""
     let mediaUrl = null
     let mediaType = null
@@ -107,15 +109,22 @@ async function handleIncomingMessage(message: any, valueContext: any) {
       messageBody = `[${type} message received]`
     }
 
-    // Find or create chat
+    // Find or create chat (ONLY CHANGE HERE)
     let chat = await WhatsAppChat.findOne({ patientPhone: from })
 
     if (!chat) {
-      console.warn(`[v0] Chat not found for phone ${from}, skipping message ingestion`)
-      return
+      console.log(`[v0] Creating new chat for phone ${from}`)
+      chat = await WhatsAppChat.create({
+        patientPhone: from,
+        patientId: null,
+        unreadCount: 0,
+        lastMessage: "",
+        lastMessageAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
     }
 
-    // Save incoming message
     const messageDoc = await WhatsAppMessage.create({
       chatId: chat._id,
       patientId: chat.patientId,
@@ -130,7 +139,6 @@ async function handleIncomingMessage(message: any, valueContext: any) {
       createdAt: new Date(parseInt(timestamp) * 1000),
     })
 
-    // Update chat
     await WhatsAppChat.findByIdAndUpdate(chat._id, {
       lastMessage: messageBody.substring(0, 100),
       lastMessageAt: new Date(),
@@ -138,7 +146,6 @@ async function handleIncomingMessage(message: any, valueContext: any) {
       updatedAt: new Date(),
     })
 
-    // Update 24-hour window
     const now = new Date()
     const window24HourEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000)
     await WhatsAppChat.findByIdAndUpdate(chat._id, {
@@ -146,7 +153,6 @@ async function handleIncomingMessage(message: any, valueContext: any) {
       lastTemplateMessageAt: now,
     })
 
-    // Log webhook event
     await WhatsAppWebhookLog.create({
       event: "message_received",
       patientPhone: from,
@@ -169,7 +175,7 @@ async function handleIncomingMessage(message: any, valueContext: any) {
 async function handleStatusUpdate(status: any) {
   try {
     const messageId = status.id
-    const statusValue = status.status // "sent", "delivered", "read", "failed"
+    const statusValue = status.status
     const timestamp = status.timestamp
     const recipientId = status.recipient_id
 
@@ -179,7 +185,6 @@ async function handleStatusUpdate(status: any) {
       recipientId,
     })
 
-    // Find and update message status
     const message = await WhatsAppMessage.findOneAndUpdate(
       { whatsappMessageId: messageId },
       {
@@ -195,7 +200,6 @@ async function handleStatusUpdate(status: any) {
         newStatus: statusValue,
       })
 
-      // Log webhook event
       await WhatsAppWebhookLog.create({
         event: `message_${statusValue}`,
         patientPhone: recipientId,
