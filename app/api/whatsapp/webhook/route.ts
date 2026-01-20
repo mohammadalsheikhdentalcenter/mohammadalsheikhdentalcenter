@@ -1,4 +1,4 @@
-import { connectDB, WhatsAppMessage, WhatsAppChat, WhatsAppWebhookLog } from "@/lib/db-server"
+import { connectDB, WhatsAppMessage, WhatsAppChat, WhatsAppWebhookLog, Patient } from "@/lib/db-server"
 import { NextRequest, NextResponse } from "next/server"
 
 const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "your-webhook-verify-token"
@@ -112,18 +112,30 @@ async function handleIncomingMessage(message: any, valueContext: any) {
     // Find or create chat (ONLY CHANGE HERE)
     let chat = await WhatsAppChat.findOne({ patientPhone: from })
 
-    if (!chat) {
-      console.log(`[v0] Creating new chat for phone ${from}`)
-      chat = await WhatsAppChat.create({
-        patientPhone: from,
-        patientId: null,
-        unreadCount: 0,
-        lastMessage: "",
-        lastMessageAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    }
+if (!chat) {
+  console.log(`[v0] Creating new chat for phone ${from}`)
+
+  const normalizedPhone = from.startsWith("+") ? from : `+${from}`
+
+  const patient = await Patient.findOne({
+    "phones.number": normalizedPhone,
+  })
+
+  chat = await WhatsAppChat.create({
+    patientPhone: normalizedPhone,
+    patientId: patient?._id || null,
+    patientName: patient?.name || "Unknown Patient",
+    whatsappBusinessPhoneNumberId:
+      valueContext.metadata?.phone_number_id || "unknown",
+
+    unreadCount: 0,
+    lastMessage: "",
+    lastMessageAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  })
+}
+
 
     const messageDoc = await WhatsAppMessage.create({
       chatId: chat._id,
