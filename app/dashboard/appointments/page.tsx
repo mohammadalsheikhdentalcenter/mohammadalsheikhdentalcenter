@@ -1139,29 +1139,29 @@ export default function AppointmentsPage() {
                                       {/* Report Actions */}
                                       {canCreateOrViewReport(apt) && (
                                         <>
-                                          {hasReport ? (
+                                          {hasReport ? 
                                             <button
                                               onClick={() => router.push("/dashboard/medical-reports")}
                                               disabled={loading.createReport}
                                               className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 px-1 text-[11px]"
                                             >
                                               <FileText className="w-3 h-3" />
-                                              Report
+                                              View Report
                                             </button>
-                                          ) : (
-                                            <button
-                                              onClick={() => {
-                                                setSelectedAppointment(apt)
-                                                setShowReportForm(true)
-                                                setReportErrors({})
-                                              }}
-                                              disabled={loading.createReport}
-                                              className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 px-1 text-[11px]"
-                                            >
-                                              <FileText className="w-3 h-3" />
-                                              Create
-                                            </button>
-                                          )}
+                                           : null
+                                            // <button
+                                            //   onClick={() => {
+                                            //     setSelectedAppointment(apt)
+                                            //     setShowReportForm(true)
+                                            //     setReportErrors({})
+                                            //   }}
+                                            //   disabled={loading.createReport}
+                                            //   className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 px-1 text-[11px]"
+                                            // >
+                                            //   <FileText className="w-3 h-3" />
+                                            //   Create
+                                            // </button>
+                                          }
                                         </>
                                       )}
 
@@ -1361,22 +1361,22 @@ export default function AppointmentsPage() {
                                             className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 px-1 text-[11px]"
                                           >
                                             <FileText className="w-3 h-3" />
-                                            Report
+                                            view Report
                                           </button>
-                                        ) : (
-                                          <button
-                                            onClick={() => {
-                                              setSelectedAppointment(apt)
-                                              setShowReportForm(true)
-                                              setReportErrors({})
-                                            }}
-                                            disabled={loading.createReport}
-                                            className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 px-1 text-[11px]"
-                                          >
-                                            <FileText className="w-3 h-3" />
-                                            Create
-                                          </button>
-                                        )}
+                                        ) : null
+                                          // <button
+                                          //   onClick={() => {
+                                          //     setSelectedAppointment(apt)
+                                          //     setShowReportForm(true)
+                                          //     setReportErrors({})
+                                          //   }}
+                                          //   disabled={loading.createReport}
+                                          //   className="text-primary hover:underline disabled:text-primary/50 disabled:cursor-not-allowed cursor-pointer flex items-center gap-1 px-1 text-[11px]"
+                                          // >
+                                          //   <FileText className="w-3 h-3" />
+                                          //   Create
+                                          // </button>
+                                        }
                                       </>
                                     )}
 

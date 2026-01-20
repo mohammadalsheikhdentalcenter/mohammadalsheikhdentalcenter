@@ -125,7 +125,7 @@ function MedicalReportsContent() {
 
           if (user?.role === "doctor") {
             const patientsWithAppointments = allPatientsList.filter((p: any) =>
-              patientIds.includes(p._id)
+              patientIds.includes(p._id),
             );
             setAppointmentPatients(patientsWithAppointments);
           } else {
@@ -287,7 +287,7 @@ function MedicalReportsContent() {
         {
           method: "DELETE",
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       if (res.ok) {
@@ -366,7 +366,7 @@ function MedicalReportsContent() {
       if (res.ok) {
         const updatedReport = await res.json();
         setReports(
-          reports.map((r) => (r._id === updatedReport._id ? updatedReport : r))
+          reports.map((r) => (r._id === updatedReport._id ? updatedReport : r)),
         );
         toast.success("Report updated successfully");
         setShowEditModal(false);
@@ -417,7 +417,7 @@ function MedicalReportsContent() {
 
   // Filter patients for dropdown based on search
   const filteredPatients = allPatients.filter((p) =>
-    p.name.toLowerCase().includes(patientSearch.toLowerCase())
+    p.name.toLowerCase().includes(patientSearch.toLowerCase()),
   );
 
   const getDisplayData = () => {
@@ -430,7 +430,7 @@ function MedicalReportsContent() {
       return Object.entries(patientReportStatus).map(
         ([appointmentId, status]: [string, any]) => {
           const report = reports.find(
-            (r) => r.appointmentId?._id === appointmentId
+            (r) => r.appointmentId?._id === appointmentId,
           );
 
           const appointment = appointments.find((a: any) => {
@@ -465,7 +465,7 @@ function MedicalReportsContent() {
             patientInfo: patientInfo,
             appointmentStatus: appointment?.status,
           };
-        }
+        },
       );
     }
     return reports;
@@ -730,7 +730,7 @@ function MedicalReportsContent() {
                               <span>
                                 Phone:{" "}
                                 {appointment.patientInfo?.phones?.find(
-                                  (p) => p.isPrimary
+                                  (p) => p.isPrimary,
                                 )?.number ||
                                   appointment.patientInfo?.phones?.[0]
                                     ?.number ||
@@ -855,10 +855,10 @@ function MedicalReportsContent() {
                                       report.reportStatus === "submitted"
                                         ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                                         : report.reportStatus === "reviewed"
-                                        ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-                                        : report.reportStatus === "approved"
-                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                        : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                                          ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                                          : report.reportStatus === "approved"
+                                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                            : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
                                     }`}
                                   >
                                     {report.reportStatus}
@@ -877,7 +877,7 @@ function MedicalReportsContent() {
                                 <p>
                                   <strong>Created:</strong>{" "}
                                   {new Date(
-                                    report.createdAt
+                                    report.createdAt,
                                   ).toLocaleDateString()}
                                 </p>
                               </div>
@@ -892,7 +892,7 @@ function MedicalReportsContent() {
                                 <span className="hidden sm:inline">View</span>
                               </button>
                               {String(
-                                report.doctorId._id || report.doctorId
+                                report.doctorId._id || report.doctorId,
                               ) === String(user?.userId || user?.id) && (
                                 <button
                                   onClick={() => handleEditReport(report)}
@@ -903,7 +903,7 @@ function MedicalReportsContent() {
                                 </button>
                               )}
                               {String(
-                                report.doctorId._id || report.doctorId
+                                report.doctorId._id || report.doctorId,
                               ) === String(user?.userId || user?.id) && (
                                 <button
                                   onClick={() => {
@@ -980,7 +980,7 @@ function MedicalReportsContent() {
                             (page) =>
                               page === 1 ||
                               page === totalPages ||
-                              Math.abs(page - currentPage) <= 1
+                              Math.abs(page - currentPage) <= 1,
                           )
                           .map((page, index, array) => {
                             const showEllipsis =
@@ -1011,7 +1011,7 @@ function MedicalReportsContent() {
                       <button
                         onClick={() =>
                           setCurrentPage((prev) =>
-                            Math.min(prev + 1, totalPages)
+                            Math.min(prev + 1, totalPages),
                           )
                         }
                         disabled={
@@ -1047,7 +1047,7 @@ function MedicalReportsContent() {
                           year: "numeric",
                           month: "long",
                           day: "numeric",
-                        }
+                        },
                       )}
                     </p>
                   </div>
@@ -1090,7 +1090,7 @@ function MedicalReportsContent() {
                                 <p className="text-foreground font-semibold mt-1 text-sm sm:text-base">
                                   {selectedReportAppointment.date
                                     ? new Date(
-                                        selectedReportAppointment.date
+                                        selectedReportAppointment.date,
                                       ).toLocaleDateString("en-US", {
                                         weekday: "long",
                                         year: "numeric",
@@ -1114,7 +1114,7 @@ function MedicalReportsContent() {
                                 <p className="text-foreground font-semibold mt-1 text-sm sm:text-base">
                                   {selectedReportAppointment.time
                                     ? new Date(
-                                        `2000-01-01T${selectedReportAppointment.time}`
+                                        `2000-01-01T${selectedReportAppointment.time}`,
                                       ).toLocaleTimeString("en-US", {
                                         hour: "2-digit",
                                         minute: "2-digit",
@@ -1188,7 +1188,7 @@ function MedicalReportsContent() {
                                 <div className="mt-1">
                                   <span
                                     className={`inline-block px-2 py-1 rounded-full text-xs font-semibold ${getAppointmentStatusColor(
-                                      selectedReportAppointment.status
+                                      selectedReportAppointment.status,
                                     )}`}
                                   >
                                     {selectedReportAppointment.status
@@ -1196,7 +1196,7 @@ function MedicalReportsContent() {
                                           .charAt(0)
                                           .toUpperCase() +
                                         selectedReportAppointment.status.slice(
-                                          1
+                                          1,
                                         )
                                       : "Unknown"}
                                   </span>
@@ -1251,7 +1251,7 @@ function MedicalReportsContent() {
                                 <p className="text-foreground text-sm">
                                   {selectedReportAppointment.createdAt
                                     ? new Date(
-                                        selectedReportAppointment.createdAt
+                                        selectedReportAppointment.createdAt,
                                       ).toLocaleDateString()
                                     : "N/A"}
                                 </p>
@@ -1454,7 +1454,7 @@ function MedicalReportsContent() {
                                     {p.name}
                                   </span>
                                 </li>
-                              )
+                              ),
                             )}
                           </ul>
                         </div>
@@ -1489,7 +1489,7 @@ function MedicalReportsContent() {
                         </p>
                         <p className="text-foreground font-semibold text-sm sm:text-base">
                           {new Date(
-                            selectedReport.nextVisit
+                            selectedReport.nextVisit,
                           ).toLocaleDateString("en-US", {
                             weekday: "long",
                             year: "numeric",
@@ -1503,7 +1503,7 @@ function MedicalReportsContent() {
                               </span>
                               <span className="text-foreground font-semibold">
                                 {new Date(
-                                  `2000-01-01T${selectedReport.nextVisitTime}`
+                                  `2000-01-01T${selectedReport.nextVisitTime}`,
                                 ).toLocaleTimeString("en-US", {
                                   hour: "2-digit",
                                   minute: "2-digit",

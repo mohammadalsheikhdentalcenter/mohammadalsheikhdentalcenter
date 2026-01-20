@@ -80,6 +80,7 @@ export async function validateAppointmentSchedulingServer(
   time: string,
   duration: number,
   excludeAppointmentId?: string,
+  roomNumber?: string,
 ): Promise<{ isValid: boolean; error?: string }> {
   try {
     console.log("[Server Validation] Starting validation...")
@@ -98,16 +99,14 @@ export async function validateAppointmentSchedulingServer(
       }
     }
 
-    const query: any = {
-      doctorId: doctorId.toString(),
-    }
+    const query: any = {}
 
     // Exclude the current appointment if updating
     if (excludeAppointmentId) {
       query._id = { $ne: excludeAppointmentId }
     }
 
-    // Fetch all appointments for the doctor
+    // Fetch ALL appointments (not just doctor's)
     const allAppointments = await Appointment.find(query).lean()
 
     // Filter active appointments (exclude closed, cancelled, completed)
@@ -117,29 +116,33 @@ export async function validateAppointmentSchedulingServer(
 
     console.log(`[Server Validation] Found ${activeAppointments.length} active appointments`)
 
-    // Check for conflicts with active appointments
-    for (const existing of activeAppointments) {
-      const existingDuration = existing.duration || 30
-      const newDuration = duration || 30
+    // ONLY CONSTRAINT: Check for room conflicts
+    // Same room cannot have two appointments at the same time (regardless of doctor)
+    // Note: Same doctor CAN have multiple appointments at the same time if they are in different rooms
+    if (roomNumber && String(roomNumber).trim() !== "") {
+      const roomConflict = activeAppointments.find((existing) => {
+        if (!existing.roomNumber || String(existing.roomNumber).trim() === "") return false
+        if (String(existing.roomNumber) !== String(roomNumber)) return false
+        const existingDuration = existing.duration || 30
+        const newDuration = duration || 30
+        return appointmentsOverlap(date, time, newDuration, existing.date, existing.time, existingDuration)
+      })
 
-      if (appointmentsOverlap(date, time, newDuration, existing.date, existing.time, existingDuration)) {
-        // Calculate the end time of the existing appointment
-        const existingEndTime = addMinutesToTime(existing.time, existingDuration)
-        
-        // Format times for display (convert to 12-hour format)
-        const existingStartDisplay = formatTimeForDisplay(existing.time)
+      if (roomConflict) {
+        const existingDuration = roomConflict.duration || 30
+        const existingEndTime = addMinutesToTime(roomConflict.time, existingDuration)
+        const existingStartDisplay = formatTimeForDisplay(roomConflict.time)
         const existingEndDisplay = formatTimeForDisplay(existingEndTime)
         
-        const errorMsg = `Doctor has an appointment from ${existingStartDisplay} to ${existingEndDisplay} on ${existing.date}. Please choose another time.`
+        const errorMsg = `Room ${roomNumber} is already booked from ${existingStartDisplay} to ${existingEndDisplay} on ${roomConflict.date}. Please choose another room or time.`
         
-        console.log("[Server Validation] Conflict detected:", {
+        console.log("[Server Validation] Room conflict detected:", {
           existingAppointment: {
-            start: existing.time,
+            roomNumber: roomConflict.roomNumber,
+            doctorName: roomConflict.doctorName,
+            start: roomConflict.time,
             end: existingEndTime,
-            startDisplay: existingStartDisplay,
-            endDisplay: existingEndDisplay,
-            date: existing.date,
-            duration: existingDuration
+            date: roomConflict.date,
           }
         })
         

@@ -1,7 +1,11 @@
-import { type NextRequest, NextResponse } from "next/server"
+//@ts-nocheck
 import { Appointment, connectDB } from "@/lib/db-server"
-import { verifyToken } from "@/lib/auth"
 import mongoose from "mongoose"
+
+/**
+ * Server-side appointment validation (for API routes)
+ * Uses database directly since it runs on server
+ */
 
 /**
  * Converts time string (HH:MM) to minutes since midnight
@@ -67,48 +71,42 @@ function appointmentsOverlap(
   return start1Abs < end2Abs && start2Abs < end1Abs
 }
 
-export async function POST(request: NextRequest) {
+/**
+ * Server-side appointment validation
+ */
+export async function validateAppointmentSchedulingServer(
+  doctorId: string,
+  date: string,
+  time: string,
+  duration: number,
+  excludeAppointmentId?: string,
+  roomNumber?: string,
+): Promise<{ isValid: boolean; error?: string }> {
   try {
-    await connectDB()
-    const token = request.headers.get("authorization")?.split(" ")[1]
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-    }
-
-    const { doctorId, date, time, duration = 30, excludeAppointmentId } = await request.json()
-
-    console.log("[API Validation] Appointment validation request:", { doctorId, date, time, duration, excludeAppointmentId })
+    console.log("[Server Validation] Starting validation...")
 
     if (!doctorId || doctorId.trim() === "") {
-      return NextResponse.json({
+      return {
         isValid: false,
         error: "Doctor ID is required",
-      })
+      }
     }
 
     if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-      return NextResponse.json({
+      return {
         isValid: false,
         error: "Invalid doctor ID format",
-      })
+      }
     }
 
-    const query: any = {
-      doctorId: doctorId.toString(),
-    }
+    const query: any = {}
 
     // Exclude the current appointment if updating
     if (excludeAppointmentId) {
       query._id = { $ne: excludeAppointmentId }
     }
 
-    // Fetch all appointments for the doctor
+    // Fetch ALL appointments (not just doctor's)
     const allAppointments = await Appointment.find(query).lean()
 
     // Filter active appointments (exclude closed, cancelled, completed)
@@ -116,54 +114,51 @@ export async function POST(request: NextRequest) {
       return apt.status !== "closed" && apt.status !== "cancelled" && apt.status !== "completed"
     })
 
-    console.log(`[API Validation] Found ${activeAppointments.length} active appointments`)
+    console.log(`[Server Validation] Found ${activeAppointments.length} active appointments`)
 
-    // Check for conflicts with active appointments
-    for (const existing of activeAppointments) {
-      const existingDuration = existing.duration || 30
-      const newDuration = duration || 30
+    // ONLY CONSTRAINT: Check for room conflicts
+    // Same room cannot have two appointments at the same time (regardless of doctor)
+    // Note: Same doctor CAN have multiple appointments at the same time if they are in different rooms
+    if (roomNumber && String(roomNumber).trim() !== "") {
+      const roomConflict = activeAppointments.find((existing) => {
+        if (!existing.roomNumber || String(existing.roomNumber).trim() === "") return false
+        if (String(existing.roomNumber) !== String(roomNumber)) return false
+        const existingDuration = existing.duration || 30
+        const newDuration = duration || 30
+        return appointmentsOverlap(date, time, newDuration, existing.date, existing.time, existingDuration)
+      })
 
-      if (appointmentsOverlap(date, time, newDuration, existing.date, existing.time, existingDuration)) {
-        // Calculate the end time of the existing appointment
-        const existingEndTime = addMinutesToTime(existing.time, existingDuration)
-        
-        // Format times for display (convert to 12-hour format)
-        const existingStartDisplay = formatTimeForDisplay(existing.time)
+      if (roomConflict) {
+        const existingDuration = roomConflict.duration || 30
+        const existingEndTime = addMinutesToTime(roomConflict.time, existingDuration)
+        const existingStartDisplay = formatTimeForDisplay(roomConflict.time)
         const existingEndDisplay = formatTimeForDisplay(existingEndTime)
         
-        const errorMsg = `Doctor has an appointment from ${existingStartDisplay} to ${existingEndDisplay} on ${existing.date}. Please choose another time.`
+        const errorMsg = `Room ${roomNumber} is already booked from ${existingStartDisplay} to ${existingEndDisplay} on ${roomConflict.date}. Please choose another room or time.`
         
-        console.log("[API Validation] Conflict detected:", {
+        console.log("[Server Validation] Room conflict detected:", {
           existingAppointment: {
-            start: existing.time,
+            roomNumber: roomConflict.roomNumber,
+            doctorName: roomConflict.doctorName,
+            start: roomConflict.time,
             end: existingEndTime,
-            startDisplay: existingStartDisplay,
-            endDisplay: existingEndDisplay,
-            date: existing.date,
-            duration: existingDuration
-          },
-          newAppointment: {
-            start: time,
-            duration: newDuration,
-            date: date
+            date: roomConflict.date,
           }
         })
         
-        return NextResponse.json({
+        return {
           isValid: false,
           error: errorMsg,
-        })
+        }
       }
     }
 
-    return NextResponse.json({ 
-      isValid: true 
-    })
+    return { isValid: true }
   } catch (error) {
-    console.error("[API Validation] Appointment validation error:", error)
-    return NextResponse.json({
+    console.error("[Server Validation] Error:", error)
+    return {
       isValid: false,
       error: `Error validating appointment: ${error instanceof Error ? error.message : "Unknown error"}`,
-    }, { status: 500 })
+    }
   }
 }

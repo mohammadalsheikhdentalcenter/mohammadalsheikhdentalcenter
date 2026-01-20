@@ -75,30 +75,40 @@ export function AddBillingRequestModal({
     }
   }
 
-  const fetchPatientStats = async (id: string) => {
-    setLoadingStats(true)
-    try {
-      const res = await fetch(`/api/billing/${id}/transactions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const stats = data.stats || { totalPaid: 0, totalDebt: 0, remainingBalance: 0 }
-        const paymentPercentage = stats.totalDebt > 0 ? (stats.totalPaid / stats.totalDebt) * 100 : 0
-        setPatientStats({
-          ...stats,
-          paymentPercentage: Math.round(paymentPercentage * 100) / 100,
-        })
-      } else {
-        setPatientStats(null)
+ const fetchPatientStats = async (id: string) => {
+  setLoadingStats(true)
+  try {
+    const res = await fetch(`/api/billing/${id}/transactions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const stats = data.stats || { totalPaid: 0, totalDebt: 0, remainingBalance: 0 }
+      
+      // Calculate percentage and cap at 100%
+      let paymentPercentage = 0
+      if (stats.totalDebt > 0) {
+        paymentPercentage = (stats.totalPaid / stats.totalDebt) * 100
+        // Cap at 100%
+        if (paymentPercentage > 100) {
+          paymentPercentage = 100
+        }
       }
-    } catch (error) {
-      console.error("[v0] Error fetching patient stats:", error)
+      
+      setPatientStats({
+        ...stats,
+        paymentPercentage: Math.round(paymentPercentage * 10) / 10, // Round to 1 decimal place
+      })
+    } else {
       setPatientStats(null)
-    } finally {
-      setLoadingStats(false)
     }
+  } catch (error) {
+    console.error("[v0] Error fetching patient stats:", error)
+    setPatientStats(null)
+  } finally {
+    setLoadingStats(false)
   }
+}
 
   const handlePatientChange = (newPatientId: string) => {
     setSelectedPatientId(newPatientId)
@@ -211,22 +221,23 @@ export function AddBillingRequestModal({
                       ${patientStats.remainingBalance.toFixed(2)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">
-                      Payment %
-                    </p>
-                    <p
-                      className={`text-base font-bold ${
-                        patientStats.paymentPercentage >= 100
-                          ? "text-accent"
-                          : patientStats.paymentPercentage >= 50
-                            ? "text-yellow-600 dark:text-yellow-400"
-                            : "text-destructive"
-                      }`}
-                    >
-                      {patientStats.paymentPercentage.toFixed(1)}%
-                    </p>
-                  </div>
+                 {/* <div>
+  <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">
+    Payment %
+  </p>
+  <p
+    className={`text-base font-bold ${
+      (patientStats.paymentPercentage || 0) >= 100
+        ? "text-accent"
+        : (patientStats.paymentPercentage || 0) >= 50
+          ? "text-yellow-600 dark:text-yellow-400"
+          : "text-destructive"
+    }`}
+  >
+    
+    {patientStats.paymentPercentage.toFixed(1)}%
+  </p>
+</div> */}
                 </div>
               </div>
             )}

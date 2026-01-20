@@ -155,6 +155,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       // Add the charge amount to total amount
       billing.totalAmount += charge.amount
 
+      // Update remaining balance: Add charge amount to existing remaining balance
+      billing.remainingBalance = (billing.remainingBalance || 0) + charge.amount
+
       // Calculate payment status using helper function
       billing.paymentStatus = calculatePaymentStatus(billing.totalAmount, billing.paidAmount)
 
@@ -166,7 +169,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         data: {
           newTotalAmount: billing.totalAmount,
           paymentStatus: billing.paymentStatus,
-          remainingAmount: billing.totalAmount - billing.paidAmount
+          remainingAmount: billing.remainingBalance
         }
       })
     } else if (action === "reject") {

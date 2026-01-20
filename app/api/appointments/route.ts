@@ -26,23 +26,45 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Extract patientId from URL query parameters if provided
+    const { searchParams } = new URL(request.url)
+    const requestedPatientId = searchParams.get("patientId")
+
     const query: any = {}
 
     if (payload?.role === "doctor") {
-      query.$or = [
-        { doctorId: String(payload.userId) }, // Current assignments
-        { originalDoctorId: String(payload.userId) }, // Referred out appointments
-        {
-          status: "refer_back",
-          originalDoctorId: String(payload.userId),
-        },
-      ]
-      console.log("[v0] Doctor fetching appointments with query:", JSON.stringify(query))
-      console.log("[v0] Doctor ID:", String(payload.userId))
-    } else if (patientId) {
+      // If a specific patientId is requested, filter by both doctor and patient
+      if (requestedPatientId) {
+        query.patientId = requestedPatientId
+        query.$or = [
+          { doctorId: String(payload.userId) }, // Current assignments
+          { originalDoctorId: String(payload.userId) }, // Referred out appointments
+          {
+            status: "refer_back",
+            originalDoctorId: String(payload.userId),
+          },
+        ]
+        console.log("[v0] Doctor fetching appointments for specific patient:", {
+          patientId: requestedPatientId,
+          doctorId: String(payload.userId),
+        })
+      } else {
+        // Get all appointments for this doctor
+        query.$or = [
+          { doctorId: String(payload.userId) }, // Current assignments
+          { originalDoctorId: String(payload.userId) }, // Referred out appointments
+          {
+            status: "refer_back",
+            originalDoctorId: String(payload.userId),
+          },
+        ]
+        console.log("[v0] Doctor fetching all appointments with query:", JSON.stringify(query))
+        console.log("[v0] Doctor ID:", String(payload.userId))
+      }
+    } else if (patientId || requestedPatientId) {
       // For patients, show only their appointments
-      query.patientId = patientId
-      console.log("[v0] Patient fetching appointments - patientId:", patientId)
+      query.patientId = patientId || requestedPatientId
+      console.log("[v0] Patient fetching appointments - patientId:", patientId || requestedPatientId)
     }
     // For admin and receptionist, show all appointments
 
@@ -170,8 +192,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Doctor not found" }, { status: 404 })
     }
 
-    // Use server-side validation (no token needed)
-    const validation = await validateAppointmentSchedulingServer(finalDoctorId, date, time, duration || 30)
+    // Use server-side validation (no token needed) - include roomNumber for room conflict checking
+    const validation = await validateAppointmentSchedulingServer(finalDoctorId, date, time, duration || 30, undefined, roomNumber)
     if (!validation.isValid) {
       console.warn("[DEBUG] Validation failed:", validation.error)
       return NextResponse.json({ error: validation.error }, { status: 409 })

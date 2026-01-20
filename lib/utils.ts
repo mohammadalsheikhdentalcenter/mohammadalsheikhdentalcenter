@@ -27,3 +27,24 @@ export function formatTime(time: string): string {
   const displayHour = hour % 12 || 12
   return `${displayHour}:${minutes} ${ampm}`
 }
+
+export function getAllPhoneNumbers(patientData: any): string[] {
+  const phoneNumbers: string[] = []
+  
+  // Collect all available phone numbers from patient data
+  if (patientData.phone && patientData.phone.trim()) {
+    phoneNumbers.push(patientData.phone.trim())
+  }
+  if (patientData.alternatePhone && patientData.alternatePhone.trim()) {
+    phoneNumbers.push(patientData.alternatePhone.trim())
+  }
+  if (patientData.phoneNumber && patientData.phoneNumber.trim()) {
+    phoneNumbers.push(patientData.phoneNumber.trim())
+  }
+  if (patientData.mobileNumber && patientData.mobileNumber.trim()) {
+    phoneNumbers.push(patientData.mobileNumber.trim())
+  }
+  
+  // Remove duplicates
+  return [...new Set(phoneNumbers)]
+}

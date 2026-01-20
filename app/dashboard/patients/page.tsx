@@ -1392,7 +1392,7 @@ export default function PatientsPage() {
 
                     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400">
-                        {selectedPatient.insuranceProvider ? "✓" : "✗"}
+                        {selectedPatient.insuranceProvider ? "���" : "✗"}
                       </div>
                       <div className="text-xs text-amber-600/80 dark:text-amber-400/80 font-medium">Insurance</div>
                     </div>

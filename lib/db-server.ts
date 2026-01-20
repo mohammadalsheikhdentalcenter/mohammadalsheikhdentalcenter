@@ -161,6 +161,7 @@ const billingSchema = new mongoose.Schema({
   ],
   totalAmount: { type: Number, required: true },
   paidAmount: { type: Number, default: 0 },
+  remainingBalance: { type: Number, default: 0 }, // Debit/outstanding amount - editable by staff
   transactions: [
     {
       _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
@@ -200,6 +201,9 @@ const billingSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ["Pending", "Paid", "Partially Paid"], default: "Pending" },
   paymentDate: Date,
   notes: String,
+  adjustmentNotes: String, // Track reason for balance adjustments
+  lastAdjustedBy: String, // Track who made the adjustment
+  lastAdjustedAt: Date, // Track when the adjustment was made
   createdBy: String,
   createdAt: { type: Date, default: Date.now },
 })
@@ -274,7 +278,9 @@ const appointmentReportSchema = new mongoose.Schema({
   referralId: { type: mongoose.Schema.Types.ObjectId, ref: "AppointmentReferral", default: null },
   reportStatus: { type: String, enum: ["draft", "submitted", "reviewed", "approved"], default: "submitted" },
   previousReportId: { type: mongoose.Schema.Types.ObjectId, ref: "AppointmentReport", default: null },
+  nextVisitAppointmentId: { type: String, default: null }, // Stores the ID of the automatically created next visit appointment
   createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
 })
 
 // Define PatientReferral schema for doctor-to-receptionist patient referrals

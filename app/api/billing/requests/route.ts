@@ -48,7 +48,14 @@ export async function GET(req: NextRequest) {
       const allPatientBillings = await Billing.find({ patientId: billing.patientId }).lean()
       const totalPaid = allPatientBillings.reduce((sum, b) => sum + (b.paidAmount || 0), 0)
       const totalDebt = allPatientBillings.reduce((sum, b) => sum + (b.totalAmount || 0), 0)
-      const paymentPercentage = totalDebt > 0 ? Math.round((totalPaid / totalDebt) * 100 * 100) / 100 : 0
+       const remainingBalance = billings.reduce((sum: number, b: any) => {
+      const unpaidOnThisRecord = Math.max(0, (b.totalAmount || 0) - (b.paidAmount || 0))
+      return sum + unpaidOnThisRecord
+    }, 0)
+    const totalPaid2 = Math.max(0, totalDebt - remainingBalance)
+    // Calculate payment percentage
+    const paymentPercentage = totalDebt > 0 ? 
+    Math.min(100, (totalPaid2 / totalDebt) * 100) : 0
 
       if (billing.extraChargesRequested && Array.isArray(billing.extraChargesRequested)) {
         billing.extraChargesRequested.forEach((charge: any) => {

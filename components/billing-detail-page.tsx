@@ -3,13 +3,13 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "@/components/auth-context"
 import { toast } from "react-hot-toast"
-import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, Eye, Stethoscope } from "lucide-react"
+import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, FileText as FileIcon } from "lucide-react"
 import { AddDebtModal } from "@/components/add-debt-modal"
 import { AddPaymentModal } from "@/components/add-payment-modal"
-import { ProceduresFindingsModal } from "@/components/procedures-findings-modal"
-import { ToothChartVisual } from "@/components/tooth-chart-visual"
 import { PaymentHistory } from "./payment-history"
 import { BillingChart } from "./billing-chart"
+import { EditRemainingBalanceModal } from "@/components/edit-remaining-balance-modal"
+import { PatientReportsSection } from "@/components/patient-reports-section"
 
 export function BillingDetailPage({ patient, onBack }: any) {
   const { token } = useAuth()
@@ -22,10 +22,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
   const [loading, setLoading] = useState(false)
   const [showAddDebt, setShowAddDebt] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
-  const [showProceduresFinding, setShowProceduresFinding] = useState(false)
-  const [showToothChart, setShowToothChart] = useState(false)
-  const [toothChartData, setToothChartData] = useState(null)
-  const [toothChartLoading, setToothChartLoading] = useState(false)
+  const [showReports, setShowReports] = useState(false)
+  const [showEditBalance, setShowEditBalance] = useState(false)
+  const [selectedBillingId, setSelectedBillingId] = useState(null)
 
   useEffect(() => {
     if (patient?.patientId) {
@@ -71,24 +70,17 @@ export function BillingDetailPage({ patient, onBack }: any) {
     }, 300)
   }
 
-  const handleViewToothChart = async () => {
-    setToothChartLoading(true)
-    try {
-      const res = await fetch(`/api/tooth-chart?patientId=${patient.patientId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setToothChartData(data.toothChart)
-        setShowToothChart(true)
-      } else {
-        toast.error("Failed to load tooth chart")
-      }
-    } catch (error) {
-      toast.error("Error loading tooth chart")
-    } finally {
-      setToothChartLoading(false)
-    }
+  const handleEditRemainingBalance = (billingId: string) => {
+    setSelectedBillingId(billingId)
+    setShowEditBalance(true)
+  }
+
+  const handleBalanceUpdated = () => {
+    setShowEditBalance(false)
+    setSelectedBillingId(null)
+    setTimeout(() => {
+      fetchTransactions()
+    }, 300)
   }
 
   return (
@@ -107,19 +99,11 @@ export function BillingDetailPage({ patient, onBack }: any) {
 
             <div className="flex flex-col sm:flex-row sm:gap-2 gap-2 w-full justify-end">
               <button
-                onClick={handleViewToothChart}
-                disabled={toothChartLoading}
-                className="flex items-center justify-center gap-2 bg-muted hover:bg-muted border border-border text-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer"
+                onClick={() => setShowReports(true)}
+                className="flex items-center justify-center gap-2 bg-muted hover:bg-muted/80 border border-border text-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer"
               >
-                <Eye className="w-4 h-4" />
-                {toothChartLoading ? "Loading..." : "ToothChart"}
-              </button>
-              <button
-                onClick={() => setShowProceduresFinding(true)}
-                className="flex items-center justify-center gap-2 bg-muted hover:bg-muted border border-border text-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 !test-xs cursor-pointer"
-              >
-                <Stethoscope className="w-4 h-4" />
-                Procedures & Findings
+                <FileIcon className="w-4 h-4" />
+                View Reports
               </button>
 
               <button
@@ -203,7 +187,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
                 {/* Total Debt */}
                 <div className="bg-card rounded-xl border border-border p-5 hover:border-primary/50 transition-colors duration-200">
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1">
                       <div className="p-2 bg-primary/10 rounded-lg">
                         <FileText className="w-5 h-5 text-primary" />
                       </div>
@@ -212,6 +196,14 @@ export function BillingDetailPage({ patient, onBack }: any) {
                         <p className="text-2xl font-bold text-foreground">${(stats?.totalDebt || 0).toFixed(2)}</p>
                       </div>
                     </div>
+                    {billings.length > 0 && (
+                      <button
+                        onClick={() => handleEditRemainingBalance(billings[0]?._id)}
+                        className="px-3 py-1.5 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors whitespace-nowrap ml-2 cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -222,7 +214,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1">
                       <div
                         className={`p-2 rounded-lg ${
                           (stats?.remainingBalance || 0) > 0 ? "bg-destructive/10" : "bg-accent/10"
@@ -245,6 +237,14 @@ export function BillingDetailPage({ patient, onBack }: any) {
                         </p>
                       </div>
                     </div>
+                    {billings.length > 0 && (
+                      <button
+                        onClick={() => handleEditRemainingBalance(billings[0]?._id)}
+                        className="px-3 py-1.5 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors whitespace-nowrap ml-2 cursor-pointer"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
@@ -271,33 +271,21 @@ export function BillingDetailPage({ patient, onBack }: any) {
           </>
         )}
 
-        {/* Tooth Chart Modal */}
-        {showToothChart && (
+        {/* Reports Modal */}
+        {showReports && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card rounded-lg border border-border p-4 sm:p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Tooth Chart - {patient?.name}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Appointment Reports - {patient?.name}</h2>
                 <button
-                  onClick={() => setShowToothChart(false)}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowReports(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
 
-              {toothChartData ? (
-                <div className="space-y-4">
-                  <ToothChartVisual teeth={toothChartData.teeth || {}} onToothClick={() => {}} readOnly={true} />
-                  {toothChartData.overallNotes && (
-                    <div className="bg-muted p-4 rounded-lg">
-                      <h3 className="font-semibold text-foreground mb-2">Overall Notes</h3>
-                      <p className="text-muted-foreground">{toothChartData.overallNotes}</p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-12 text-muted-foreground">No tooth chart available for this patient</div>
-              )}
+              <PatientReportsSection patientId={patient?.patientId} token={token} isDoctor={false} />
             </div>
           </div>
         )}
@@ -318,10 +306,13 @@ export function BillingDetailPage({ patient, onBack }: any) {
               onClose={() => setShowAddPayment(false)}
               onSuccess={handlePaymentAdded}
             />
-            <ProceduresFindingsModal
-              patientId={patient.patientId}
-              isOpen={showProceduresFinding}
-              onClose={() => setShowProceduresFinding(false)}
+            <EditRemainingBalanceModal
+              isOpen={showEditBalance}
+              onClose={() => setShowEditBalance(false)}
+              onSuccess={handleBalanceUpdated}
+              currentBalance={stats?.remainingBalance || 0}
+              totalDebt={stats?.totalDebt || 0}
+              billingId={selectedBillingId}
             />
           </>
         )}

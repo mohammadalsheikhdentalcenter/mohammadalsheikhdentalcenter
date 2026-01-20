@@ -259,16 +259,19 @@ function ActionDropdown({
       className: "text-blue-600",
     })
 
-    if (userRole === "doctor" && !isAppointmentTerminal) {
+    if (userRole === "doctor" && !isAppointmentTerminal ) {
       // Create/View Report action - using permission logic
       if (permissions.canCreateOrViewReport(appointment)) {
-        items.push({
+        if(hasReport) {
+          items.push({
           label: hasReport ? "View Report" : "Create Report",
           icon: <FileText className="w-4 h-4" />,
           onClick: hasReport ? () => onViewReport() : () => onCreateReport(appointment),
           disabled: loading.createReport,
           className: "text-blue-600",
         })
+        }
+        
       }
 
       // Refer to Doctor action - using permission logic
