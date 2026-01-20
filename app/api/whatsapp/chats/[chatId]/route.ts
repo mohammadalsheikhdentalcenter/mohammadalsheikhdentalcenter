@@ -1,8 +1,7 @@
 import { connectDB, WhatsAppChat, WhatsAppMessage, User } from "@/lib/db-server"
 import { NextRequest, NextResponse } from "next/server"
-import jwt from "jsonwebtoken"
+import { verifyToken } from "@/lib/auth"
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key"
 
 // Verify user is admin or receptionist
 async function verifyAuth(req: NextRequest) {
@@ -24,10 +23,21 @@ async function verifyAuth(req: NextRequest) {
 // GET /api/whatsapp/chats/[chatId] - Get specific chat with all details
 export async function GET(req: NextRequest, { params }: { params: { chatId: string } }) {
   try {
-    const user = await verifyAuth(req)
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     await connectDB()
+        const token = req.headers.get("authorization")?.split(" ")[1]
+    
+        if (!token) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        }
+    
+        const payload = verifyToken(token)
+        if (!payload) {
+          return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+        }
+    
+        if (payload.role !== "admin" && payload.role !== "hr") {
+          return NextResponse.json({ error: "Access denied" }, { status: 403 })
+        }
 
     const { chatId } = params
 
