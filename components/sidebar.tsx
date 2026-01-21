@@ -15,7 +15,6 @@ import {
   Menu,
   X,
   Table,
-  MessageCircle,
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import Image from "next/image"
@@ -101,7 +100,6 @@ export function Sidebar() {
     if (user?.role === "admin") {
       return [
         ...baseItems,
-        // { label: "WhatsApp Inbox", href: "/dashboard/inbox", icon: MessageCircle },
         { label: "Patients", href: "/dashboard/patients", icon: Users },
         { label: "Appointments", href: "/dashboard/appointments", icon: Calendar },
         { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
@@ -135,7 +133,6 @@ export function Sidebar() {
     if (user?.role === "receptionist") {
       return [
         ...baseItems,
-        // { label: "WhatsApp Inbox", href: "/dashboard/inbox", icon: MessageCircle },
         { label: "Patients", href: "/dashboard/patients", icon: Users },
         { label: "Appointments", href: "/dashboard/appointments", icon: Calendar },
         { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },

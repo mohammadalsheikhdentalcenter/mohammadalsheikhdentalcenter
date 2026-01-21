@@ -28,23 +28,48 @@ export function formatTime(time: string): string {
   return `${displayHour}:${minutes} ${ampm}`
 }
 
+export function formatTimeFor12Hour(time: string): string {
+  if (!time || time.trim() === "") return ""
+  try {
+    const [hours, minutes] = time.split(":")
+    const hour = Number.parseInt(hours)
+    if (isNaN(hour)) return time
+    const ampm = hour >= 12 ? "PM" : "AM"
+    const displayHour = hour % 12 || 12
+    return `${displayHour}:${minutes} ${ampm}`
+  } catch {
+    return time
+  }
+}
+
 export function getAllPhoneNumbers(patientData: any): string[] {
   const phoneNumbers: string[] = []
   
-  // Collect all available phone numbers from patient data
-  if (patientData.phone && patientData.phone.trim()) {
-    phoneNumbers.push(patientData.phone.trim())
-  }
-  if (patientData.alternatePhone && patientData.alternatePhone.trim()) {
-    phoneNumbers.push(patientData.alternatePhone.trim())
-  }
-  if (patientData.phoneNumber && patientData.phoneNumber.trim()) {
-    phoneNumbers.push(patientData.phoneNumber.trim())
-  }
-  if (patientData.mobileNumber && patientData.mobileNumber.trim()) {
-    phoneNumbers.push(patientData.mobileNumber.trim())
+  // Handle the phones array structure (phones: [{ number, isPrimary }])
+  if (patientData.phones && Array.isArray(patientData.phones)) {
+    patientData.phones.forEach((phoneObj: any) => {
+      if (phoneObj.number && typeof phoneObj.number === "string" && phoneObj.number.trim()) {
+        phoneNumbers.push(phoneObj.number.trim())
+      }
+    })
   }
   
-  // Remove duplicates
-  return [...new Set(phoneNumbers)]
+  // Fallback to legacy phone number formats if no phones array
+  if (phoneNumbers.length === 0) {
+    if (patientData.phone && patientData.phone.trim()) {
+      phoneNumbers.push(patientData.phone.trim())
+    }
+    if (patientData.alternatePhone && patientData.alternatePhone.trim()) {
+      phoneNumbers.push(patientData.alternatePhone.trim())
+    }
+    if (patientData.phoneNumber && patientData.phoneNumber.trim()) {
+      phoneNumbers.push(patientData.phoneNumber.trim())
+    }
+    if (patientData.mobileNumber && patientData.mobileNumber.trim()) {
+      phoneNumbers.push(patientData.mobileNumber.trim())
+    }
+  }
+  
+  // Remove duplicates and empty values
+  return [...new Set(phoneNumbers.filter(Boolean))]
 }

@@ -13,7 +13,6 @@ const onest = Onest({
 export const metadata: Metadata = {
   title: "Dr.Mohammad Alsheikh Dental Center",
   description: "Comprehensive Dental Clinic Management System",
-    generator: 'v0.app'
 }
 
 export default function RootLayout({

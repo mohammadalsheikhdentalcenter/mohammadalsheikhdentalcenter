@@ -10,6 +10,7 @@ import { Patient } from "@/lib/db-server"
 import { AppointmentReferral } from "@/lib/db-server"
 import { sendAppointmentCancellationEmail } from "@/lib/nodemailer-service"
 import { sendAppointmentRescheduleEmail } from "@/lib/nodemailer-service"
+import { formatTimeFor12Hour } from "@/lib/utils"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -253,12 +254,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       // Appointment cancellation notification
       if (updateData.status === "cancelled" && originalAppointment.status !== "cancelled") {
         console.log("🟠 [PUT] Appointment marked as cancelled — sending WhatsApp cancellation...")
+        const formattedCancellationTime = formatTimeFor12Hour(originalAppointment.time)
 
         const whatsappResult = await sendAppointmentCancellation(
           allPhoneNumbers,
           originalAppointment.patientName,
           originalAppointment.date,
-          originalAppointment.time,
+          formattedCancellationTime,
           originalAppointment.doctorName,
         )
 
@@ -277,7 +279,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             originalAppointment.patientName,
             originalAppointment.doctorName,
             originalAppointment.date,
-            originalAppointment.time,
+            formattedCancellationTime,
           )
 
           if (!emailResult.success) {
@@ -292,17 +294,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       ) {
         const newDate = updateData.date || originalAppointment.date
         const newTime = updateData.time || originalAppointment.time
+        const formattedNewTime = formatTimeFor12Hour(newTime)
 
         console.log("🟠 [PUT] Appointment rescheduled — sending WhatsApp notification...", {
           newDate,
-          newTime,
+          originalTime: newTime,
+          formattedTime: formattedNewTime,
         })
 
         const whatsappResult = await sendAppointmentReschedule(
           allPhoneNumbers,
           originalAppointment.patientName,
           newDate,
-          newTime,
+          formattedNewTime,
           originalAppointment.doctorName,
         )
 
@@ -321,9 +325,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             originalAppointment.patientName,
             originalAppointment.doctorName,
             newDate,
-            newTime,
+            formattedNewTime,
             originalAppointment.date,
-            originalAppointment.time,
+            formatTimeFor12Hour(originalAppointment.time),
           )
 
           if (!emailResult.success) {
@@ -395,12 +399,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     if (patient && allPhoneNumbers.length > 0) {
       console.log("🟢 [DELETE] Sending WhatsApp cancellation notification to:", allPhoneNumbers)
+      const formattedDeleteTime = formatTimeFor12Hour(deletedAppointment.time)
 
       const whatsappResult = await sendAppointmentCancellation(
         allPhoneNumbers,
         deletedAppointment.patientName,
         deletedAppointment.date,
-        deletedAppointment.time,
+        formattedDeleteTime,
         deletedAppointment.doctorName,
       )
 
@@ -417,12 +422,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     if (patient && patient.email) {
       console.log("  Sending email cancellation to patient:", patient.email)
+      const formattedDeleteEmailTime = formatTimeFor12Hour(deletedAppointment.time)
       const emailResult = await sendAppointmentCancellationEmail(
         patient.email,
         deletedAppointment.patientName,
         deletedAppointment.doctorName,
         deletedAppointment.date,
-        deletedAppointment.time,
+        formattedDeleteEmailTime,
       )
 
       if (!emailResult.success) {

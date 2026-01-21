@@ -4,7 +4,7 @@ import { Appointment, connectDB, AppointmentReport, Patient, User } from "@/lib/
 import { verifyToken } from "@/lib/auth"
 import { sendAppointmentReschedule, sendAppointmentCancellation, sendAppointmentConfirmation, sendAppointmentConfirmationArabic } from "@/lib/whatsapp-service"
 import { sendAppointmentCancellationEmail, sendAppointmentRescheduleEmail } from "@/lib/nodemailer-service"
-import { getAllPhoneNumbers } from "@/lib/utils"
+import { getAllPhoneNumbers, formatTimeFor12Hour } from "@/lib/utils"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -176,18 +176,31 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             const doctorData = await User.findById(report.doctorId)
             if (patientData) {
               const allPhoneNumbers = getAllPhoneNumbers(patientData)
+              console.log("[v0] WhatsApp Reschedule - Phone numbers:", { count: allPhoneNumbers?.length, numbers: allPhoneNumbers })
+              
               if (allPhoneNumbers && allPhoneNumbers.length > 0) {
-                // Send English template
-                await sendAppointmentReschedule(
-                  allPhoneNumbers,
-                  patientData.name,
-                  String(finalNextVisitDate).trim(),
-                  String(finalNextVisitTime).trim(),
-                  doctorData?.name || "Doctor",
-                ).catch(err => console.warn("[v0] Failed to send English WhatsApp reschedule:", err))
+                const formattedRescheduleTime = formatTimeFor12Hour(String(finalNextVisitTime).trim())
+                console.log("[v0] WhatsApp Reschedule - Formatted time:", { original: finalNextVisitTime, formatted: formattedRescheduleTime })
                 
-                // Send Arabic template (if available)
-                // Note: Add Arabic reschedule template if available in whatsapp-service
+                try {
+                  // Send English template
+                  console.log("[v0] Sending English WhatsApp reschedule template")
+                  const rescheduleResult = await sendAppointmentReschedule(
+                    allPhoneNumbers,
+                    patientData.name,
+                    String(finalNextVisitDate).trim(),
+                    formattedRescheduleTime,
+                    doctorData?.name || "Doctor",
+                  )
+                  console.log("[v0] English reschedule result:", rescheduleResult)
+                  
+                  // Send Arabic template (if available)
+                  // Note: Add Arabic reschedule template if available in whatsapp-service
+                } catch (whatsappErr) {
+                  console.error("[v0] Error sending WhatsApp reschedule:", whatsappErr)
+                }
+              } else {
+                console.warn("[v0] No phone numbers found for reschedule notification")
               }
             }
           } else {
@@ -220,14 +233,39 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
             // Send confirmation notification
             if (patientData) {
               const allPhoneNumbers = getAllPhoneNumbers(patientData)
+              console.log("[v0] WhatsApp Confirmation - Phone numbers:", { count: allPhoneNumbers?.length, numbers: allPhoneNumbers })
+              
               if (allPhoneNumbers && allPhoneNumbers.length > 0) {
-                await sendAppointmentConfirmation(
-                  allPhoneNumbers,
-                  patientData.name,
-                  String(finalNextVisitDate).trim(),
-                  String(finalNextVisitTime).trim(),
-                  doctorData?.name || "Doctor",
-                ).catch(err => console.warn("[v0] Failed to send WhatsApp confirmation:", err))
+                const formattedConfirmTime = formatTimeFor12Hour(String(finalNextVisitTime).trim())
+                console.log("[v0] WhatsApp Confirmation - Formatted time:", { original: finalNextVisitTime, formatted: formattedConfirmTime })
+                
+                try {
+                  // Send English template
+                  console.log("[v0] Sending English WhatsApp confirmation template")
+                  const confirmResult = await sendAppointmentConfirmation(
+                    allPhoneNumbers,
+                    patientData.name,
+                    String(finalNextVisitDate).trim(),
+                    formattedConfirmTime,
+                    doctorData?.name || "Doctor",
+                  )
+                  console.log("[v0] English confirmation result:", confirmResult)
+                  
+                  // Send Arabic template
+                  console.log("[v0] Sending Arabic WhatsApp confirmation template")
+                  const arabicResult = await sendAppointmentConfirmationArabic(
+                    allPhoneNumbers,
+                    String(finalNextVisitDate).trim(),
+                    formattedConfirmTime,
+                    doctorData?.name || "Doctor",
+                    patientData.name,
+                  )
+                  console.log("[v0] Arabic confirmation result:", arabicResult)
+                } catch (whatsappErr) {
+                  console.error("[v0] Error sending WhatsApp confirmation:", whatsappErr)
+                }
+              } else {
+                console.warn("[v0] No phone numbers found for confirmation notification")
               }
             }
           }

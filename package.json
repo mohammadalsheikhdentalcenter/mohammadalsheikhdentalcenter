@@ -6,9 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "eslint .",
-    "seed": "ts-node-esm scripts/seed.ts",
+    "type": "module",
     "start": "next start",
-    "type": "module"
+    "seed": "ts-node-esm scripts/seed.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

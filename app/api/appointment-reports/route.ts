@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { AppointmentReport, connectDB, Patient, User, Appointment } from "@/lib/db-server"
 import { verifyToken, verifyPatientToken } from "@/lib/auth"
 import { sendAppointmentConfirmation, sendAppointmentConfirmationArabic } from "@/lib/whatsapp-service"
-import { getAllPhoneNumbers } from "@/lib/utils"
+import { getAllPhoneNumbers, formatTimeFor12Hour } from "@/lib/utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -353,24 +353,45 @@ export async function POST(request: NextRequest) {
         
         // Send WhatsApp notification for next visit appointment
         const allPhoneNumbers = patientExists ? getAllPhoneNumbers(patientExists) : []
+        console.log("[v0] WhatsApp Notification - Phone numbers retrieved:", { 
+          count: allPhoneNumbers?.length, 
+          numbers: allPhoneNumbers 
+        })
+        
         if (allPhoneNumbers && allPhoneNumbers.length > 0) {
-          // Send English template
-          await sendAppointmentConfirmation(
-            allPhoneNumbers,
-            patientExists.name,
-            nextVisitDate,
-            nextVisitTime,
-            doctorExists.name,
-          ).catch(err => console.warn("[v0] Failed to send English WhatsApp for next visit:", err))
+          const formattedNextVisitTime = formatTimeFor12Hour(nextVisitTime)
+          console.log("[v0] WhatsApp Notification - Formatted time:", { 
+            original: nextVisitTime, 
+            formatted: formattedNextVisitTime 
+          })
           
-          // Send Arabic template
-          await sendAppointmentConfirmationArabic(
-            allPhoneNumbers,
-            nextVisitDate,
-            nextVisitTime,
-            doctorExists.name,
-            patientExists.name,
-          ).catch(err => console.warn("[v0] Failed to send Arabic WhatsApp for next visit:", err))
+          try {
+            // Send English template
+            console.log("[v0] Sending English WhatsApp template for next visit appointment")
+            const englishResult = await sendAppointmentConfirmation(
+              allPhoneNumbers,
+              patientExists.name,
+              nextVisitDate,
+              formattedNextVisitTime,
+              doctorExists.name,
+            )
+            console.log("[v0] English WhatsApp result:", englishResult)
+            
+            // Send Arabic template
+            console.log("[v0] Sending Arabic WhatsApp template for next visit appointment")
+            const arabicResult = await sendAppointmentConfirmationArabic(
+              allPhoneNumbers,
+              nextVisitDate,
+              formattedNextVisitTime,
+              doctorExists.name,
+              patientExists.name,
+            )
+            console.log("[v0] Arabic WhatsApp result:", arabicResult)
+          } catch (whatsappError) {
+            console.error("[v0] Error sending WhatsApp notifications:", whatsappError)
+          }
+        } else {
+          console.warn("[v0] No phone numbers found for patient to send WhatsApp notification")
         }
       } catch (error) {
         console.error("[v0] Error creating next visit appointment:", error)
