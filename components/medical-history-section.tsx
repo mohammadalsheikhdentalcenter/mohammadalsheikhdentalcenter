@@ -1,11 +1,12 @@
-//@ts-nocheck
+// @ts-nocheck
 import type React from "react"
 import { useState, useEffect } from "react"
-import { Plus, Edit2, Trash2, X, Pill, FileText, Stethoscope, User, ChevronLeft, ChevronRight } from "lucide-react"
+import { Plus, Edit2, Trash2, X, Pill, FileText, Stethoscope, User, ChevronLeft, ChevronRight, Calendar, MessageSquare, Activity, Droplets } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { ConfirmDeleteModal } from "./confirm-delete-modal" // Adjust the import path as needed
+import { ConfirmDeleteModal } from "./confirm-delete-modal"
 
 interface MedicalEntry {
+  _id?: string
   date: string
   notes: string
   findings: string
@@ -31,10 +32,11 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [filterYear, setFilterYear] = useState<string>("all")
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage, setItemsPerPage] = useState(5)
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     notes: "",
     findings: "",
@@ -45,7 +47,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
   
   // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [entryToDelete, setEntryToDelete] = useState<number | null>(null)
+  const [entryToDelete, setEntryToDelete] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
@@ -136,6 +138,29 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
     return "Unknown Doctor"
   }
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+  }
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  const truncateText = (text: string, maxLength: number = 100) => {
+    if (!text) return ""
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + "..."
+  }
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
     if (!formData.notes.trim()) newErrors.notes = "Notes are required"
@@ -159,7 +184,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
     setSaving(true)
 
     try {
-      if (editingIndex !== null && history && history._id) {
+      if (editingId && history && history._id) {
         const res = await fetch(`/api/medical-history/${history._id}`, {
           method: "PUT",
           headers: {
@@ -167,7 +192,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            entryIndex: editingIndex,
+            entryId: editingId,
             entry: {
               notes: formData.notes,
               findings: formData.findings,
@@ -189,7 +214,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
             title: "Success",
             description: "Medical history entry updated",
           })
-          setEditingIndex(null)
+          setEditingId(null)
         } else {
           const error = await res.json()
           toast({
@@ -242,6 +267,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
       setFormData({ notes: "", findings: "", treatment: "", medications: "" })
       setErrors({})
       setCurrentPage(1)
+      setExpandedEntryId(null)
     } catch (error) {
       toast({
         title: "Error",
@@ -276,30 +302,35 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
     return Array.from(years).sort().reverse()
   }
 
-  const handleEditEntry = (index: number) => {
-    const entry = history.entries[index]
-    setFormData({
-      notes: entry.notes || "",
-      findings: entry.findings || "",
-      treatment: entry.treatment || "",
-      medications: entry.medications?.join(", ") || "",
-    })
-    setEditingIndex(index)
-    setShowForm(true)
-    setErrors({})
+  const handleEditEntry = (entryId: string) => {
+    const entry = history.entries.find((e: MedicalEntry) => e._id === entryId)
+    if (entry) {
+      setFormData({
+        notes: entry.notes || "",
+        findings: entry.findings || "",
+        treatment: entry.treatment || "",
+        medications: entry.medications?.join(", ") || "",
+      })
+      setEditingId(entryId)
+      setShowForm(true)
+      setErrors({})
+      setExpandedEntryId(null)
+    }
   }
 
-  const handleDeleteClick = (index: number) => {
-    const entry = history.entries[index]
-    const doctorName = getDoctorName(entry)
-    const date = new Date(entry.date).toLocaleDateString()
-    
-    setEntryToDelete(index)
-    setDeleteModalOpen(true)
+  const handleDeleteClick = (entryId: string) => {
+    const entry = history.entries.find((e: MedicalEntry) => e._id === entryId)
+    if (entry) {
+      const doctorName = getDoctorName(entry)
+      const date = formatDate(entry.date)
+      
+      setEntryToDelete(entryId)
+      setDeleteModalOpen(true)
+    }
   }
 
   const handleDeleteEntry = async () => {
-    if (!history || !history._id || entryToDelete === null) {
+    if (!history || !history._id || !entryToDelete) {
       setDeleteModalOpen(false)
       return
     }
@@ -313,7 +344,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ entryIndex: entryToDelete }),
+        body: JSON.stringify({ entryId: entryToDelete }),
       })
 
       if (res.ok) {
@@ -324,6 +355,9 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
           description: "Medical history entry deleted",
         })
         setCurrentPage(1)
+        if (expandedEntryId === entryToDelete) {
+          setExpandedEntryId(null)
+        }
       } else {
         const error = await res.json()
         toast({
@@ -363,33 +397,25 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const handleItemsPerPageChange = (value: number) => {
-    setItemsPerPage(value)
-    setCurrentPage(1)
+  const toggleEntryExpansion = (entryId: string) => {
+    setExpandedEntryId(expandedEntryId === entryId ? null : entryId)
   }
 
   if (loading) {
-    return <div className="text-center py-8 text-muted-foreground">Loading medical history...</div>
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-muted-foreground">Loading medical history...</p>
+        </div>
+      </div>
+    )
   }
-
-  // Get entry details for the delete modal
-  const getEntryDetails = () => {
-    if (entryToDelete === null || !history?.entries[entryToDelete]) {
-      return { doctorName: "", date: "" }
-    }
-    
-    const entry = history.entries[entryToDelete]
-    return {
-      doctorName: getDoctorName(entry),
-      date: new Date(entry.date).toLocaleDateString()
-    }
-  }
-
-  const entryDetails = getEntryDetails()
 
   return (
     <>
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-foreground">Medical History</h2>
@@ -400,7 +426,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
           {isDoctor && (
             <button
               onClick={() => {
-                setEditingIndex(null)
+                setEditingId(null)
                 setFormData({ notes: "", findings: "", treatment: "", medications: "" })
                 setErrors({})
                 setShowForm(!showForm)
@@ -415,23 +441,28 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
 
         {/* Form for adding/editing entries */}
         {showForm && isDoctor && (
-          <div className="bg-card border border-border rounded-lg p-6">
-            <h3 className="text-lg font-bold text-foreground mb-6 flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              {editingIndex !== null ? "Edit Medical Entry" : "Add Medical Entry"}
-            </h3>
+          <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <Plus className="w-5 h-5" />
+                {editingId ? "Edit Medical Entry" : "Add Medical Entry"}
+              </h3>
+              <button
+                onClick={() => setShowForm(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <form onSubmit={handleAddEntry} className="space-y-5">
-              {/* Notes Field */}
-              <div>
-                <div className="flex items-center gap-1 mb-2">
-                  <label className="text-sm font-semibold text-foreground">Notes</label>
-                  <span className="text-destructive text-sm">*</span>
-                </div>
-                <div className="relative">
-                  <div className="absolute left-3 top-3 text-muted-foreground">
-                    <FileText className="w-4 h-4" />
-                  </div>
+            <form onSubmit={handleAddEntry} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Notes Field */}
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold text-foreground flex items-center gap-1 mb-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Notes *
+                  </label>
                   <textarea
                     value={formData.notes}
                     onChange={(e) => {
@@ -439,26 +470,20 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
                       setErrors({ ...errors, notes: "" })
                     }}
                     placeholder="Clinical notes..."
-                    className={`w-full pl-10 pr-3 py-3 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm ${
+                    className={`w-full px-3 py-2.5 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm ${
                       errors.notes ? "border-destructive" : "border-border"
                     }`}
                     rows={3}
                   />
+                  {errors.notes && <p className="text-xs text-destructive mt-1">{errors.notes}</p>}
                 </div>
-                {errors.notes && <p className="text-xs text-destructive mt-1 ml-1">{errors.notes}</p>}
-                <div className="h-px bg-border my-3"></div>
-              </div>
 
-              {/* Findings Field */}
-              <div>
-                <div className="flex items-center gap-1 mb-2">
-                  <label className="text-sm font-semibold text-foreground">Findings</label>
-                  <span className="text-destructive text-sm">*</span>
-                </div>
-                <div className="relative">
-                  <div className="absolute left-3 top-3 text-muted-foreground">
-                    <Stethoscope className="w-4 h-4" />
-                  </div>
+                {/* Findings Field */}
+                <div className="md:col-span-2">
+                  <label className="text-sm font-semibold text-foreground flex items-center gap-1 mb-2">
+                    <Activity className="w-4 h-4" />
+                    Findings *
+                  </label>
                   <textarea
                     value={formData.findings}
                     onChange={(e) => {
@@ -466,47 +491,41 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
                       setErrors({ ...errors, findings: "" })
                     }}
                     placeholder="Findings..."
-                    className={`w-full pl-10 pr-3 py-3 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm ${
+                    className={`w-full px-3 py-2.5 bg-input border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm ${
                       errors.findings ? "border-destructive" : "border-border"
                     }`}
                     rows={3}
                   />
+                  {errors.findings && <p className="text-xs text-destructive mt-1">{errors.findings}</p>}
                 </div>
-                {errors.findings && <p className="text-xs text-destructive mt-1 ml-1">{errors.findings}</p>}
-                <div className="h-px bg-border my-3"></div>
-              </div>
 
-              {/* Treatment Field */}
-              <div>
-                <label className="text-sm font-semibold text-foreground block mb-2">Treatment</label>
-                <div className="relative">
-                  <div className="absolute left-3 top-3 text-muted-foreground">
-                    <Pill className="w-4 h-4" />
-                  </div>
+                {/* Treatment Field */}
+                <div>
+                  <label className="text-sm font-semibold text-foreground flex items-center gap-1 mb-2">
+                    <Stethoscope className="w-4 h-4" />
+                    Treatment
+                  </label>
                   <textarea
                     value={formData.treatment}
                     onChange={(e) => setFormData({ ...formData, treatment: e.target.value })}
                     placeholder="Treatment..."
-                    className="w-full pl-10 pr-3 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm"
-                    rows={3}
+                    className="w-full px-3 py-2.5 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm"
+                    rows={2}
                   />
                 </div>
-                <div className="h-px bg-border my-3"></div>
-              </div>
 
-              {/* Medications Field */}
-              <div>
-                <label className="text-sm font-semibold text-foreground block mb-2">Medications (comma-separated)</label>
-                <div className="relative">
-                  <div className="absolute left-3 top-3 text-muted-foreground">
+                {/* Medications Field */}
+                <div>
+                  <label className="text-sm font-semibold text-foreground flex items-center gap-1 mb-2">
                     <Pill className="w-4 h-4" />
-                  </div>
+                    Medications (comma-separated)
+                  </label>
                   <input
                     type="text"
                     value={formData.medications}
                     onChange={(e) => setFormData({ ...formData, medications: e.target.value })}
                     placeholder="e.g., Amoxicillin, Ibuprofen"
-                    className="w-full pl-10 pr-3 py-3 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm"
+                    className="w-full px-3 py-2.5 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm"
                   />
                 </div>
               </div>
@@ -517,7 +536,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
                 disabled={saving}
                 className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground px-4 py-3 rounded-lg transition-colors text-sm font-medium mt-4 cursor-pointer"
               >
-                {saving ? "Saving..." : editingIndex !== null ? "Update Entry" : "Add Entry"}
+                {saving ? "Saving..." : editingId ? "Update Entry" : "Add Entry"}
               </button>
             </form>
           </div>
@@ -549,115 +568,181 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
           </div>
         ) : null}
 
-        {/* Medical Entries List */}
-        <div className="max-h-[600px] overflow-y-auto pr-2">
+        {/* Medical Entries List - Compact Cards */}
+        <div>
           {paginatedEntries.length > 0 ? (
-            <div className="space-y-4">
-              {paginatedEntries.map((entry: MedicalEntry, index: number) => {
-                const originalIndex = history.entries.findIndex((e: MedicalEntry) => e === entry)
+            <div className="space-y-3">
+              {paginatedEntries.map((entry: MedicalEntry) => {
                 const doctorName = getDoctorName(entry)
+                const isExpanded = expandedEntryId === entry._id
+                const hasMedications = entry.medications && entry.medications.length > 0
                 
                 return (
                   <div 
-                    key={`entry-${originalIndex}`}
-                    className="bg-card border border-border rounded-lg p-4 space-y-3 hover:border-border/80 transition-colors"
+                    key={entry._id}
+                    className="bg-card border border-border rounded-lg hover:border-border/80 transition-all duration-200 cursor-pointer"
+                    onClick={() => toggleEntryExpansion(entry._id!)}
                   >
-                    {/* Entry Header with Doctor Info */}
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-2 flex-1 min-w-0">
-                        <div className="bg-blue-100 dark:bg-blue-900 p-1.5 rounded flex-shrink-0">
-                          <Stethoscope className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-semibold text-foreground truncate">Medical Entry</p>
-                            <div className="flex items-center gap-1 bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs">
-                              <User className="w-3 h-3" />
-                              <span className="truncate">{doctorName}</span>
+                    {/* Compact Header */}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 bg-primary rounded-full flex-shrink-0"></div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded-full">
+                                Medical Entry
+                              </span>
+                              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full flex items-center gap-1">
+                                <User className="w-3 h-3" />
+                                {doctorName}
+                              </span>
                             </div>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {new Date(entry.date).toLocaleDateString()} ��{" "}
-                            {new Date(entry.date).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                      {canEditEntry(entry) && (
-                        <div className="flex gap-1 flex-shrink-0">
-                          <button
-                            onClick={() => handleEditEntry(originalIndex)}
-                            className="text-primary hover:text-primary/80 transition-colors p-1 cursor-pointer"
-                            title="Edit"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(originalIndex)}
-                            className="text-destructive hover:text-destructive/80 transition-colors p-1 cursor-pointer"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                          
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {formatDate(entry.date)}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <MessageSquare className="w-3 h-3" />
+                              {truncateText(entry.notes, 60)}
+                            </div>
+                          </div>
 
-                    {/* Entry Details */}
-                    <div className="space-y-2.5">
-                      {entry.notes && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Notes</p>
-                          <p className="text-sm text-foreground bg-muted/20 p-3 rounded-md border border-border/50">
-                            {entry.notes}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {entry.findings && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Findings</p>
-                          <p className="text-sm text-foreground bg-muted/20 p-3 rounded-md border border-border/50">
-                            {entry.findings}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {entry.treatment && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase mb-1">Treatment</p>
-                          <p className="text-sm text-foreground bg-muted/20 p-3 rounded-md border border-border/50">
-                            {entry.treatment}
-                          </p>
-                        </div>
-                      )}
-                      
-                      {entry.medications && entry.medications.length > 0 && (
-                        <div>
-                          <p className="text-xs font-medium text-muted-foreground uppercase mb-2 flex items-center gap-1">
-                            <Pill className="w-3 h-3" /> Medications
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {entry.medications.map((med: string, idx: number) => (
-                              <span 
-                                key={idx} 
-                                className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-full border border-primary/20"
-                              >
-                                {med}
-                              </span>
-                            ))}
+                          {/* Quick Stats */}
+                          <div className="flex items-center gap-4">
+                            {entry.findings && (
+                              <div className="flex items-center gap-1.5">
+                                <Activity className="w-3.5 h-3.5 text-blue-500" />
+                                <span className="text-xs text-muted-foreground">Findings</span>
+                              </div>
+                            )}
+                            {hasMedications && (
+                              <div className="flex items-center gap-1.5">
+                                <Pill className="w-3.5 h-3.5 text-green-500" />
+                                <span className="text-xs text-muted-foreground">
+                                  {entry.medications.length} med{entry.medications.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
+                            )}
+                            {entry.treatment && (
+                              <div className="flex items-center gap-1.5">
+                                <Droplets className="w-3.5 h-3.5 text-purple-500" />
+                                <span className="text-xs text-muted-foreground">Treatment</span>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
+
+                        {/* Action buttons (only show on hover or when expanded) */}
+                        {canEditEntry(entry) && (
+                          <div 
+                            className="flex gap-1 flex-shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleEditEntry(entry._id!)
+                              }}
+                              className="text-primary hover:text-primary/80 transition-colors p-1.5 hover:bg-primary/10 rounded cursor-pointer"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteClick(entry._id!)
+                              }}
+                              className="text-destructive hover:text-destructive/80 transition-colors p-1.5 hover:bg-destructive/10 rounded cursor-pointer"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Expand/Collapse indicator */}
+                      <div className="flex justify-center mt-3 pt-3 border-t border-border">
+                        <div className="text-xs text-muted-foreground flex items-center gap-1">
+                          {isExpanded ? 'Click to collapse' : 'Click to expand details'}
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Expanded Details */}
+                    {isExpanded && (
+                      <div className="px-4 pb-4 border-t border-border pt-4 space-y-4 animate-in fade-in">
+                        {/* Notes */}
+                        {entry.notes && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                              <p className="text-xs font-medium text-muted-foreground">Notes</p>
+                            </div>
+                            <p className="text-sm text-foreground bg-muted/30 p-3 rounded-md">
+                              {entry.notes}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Findings */}
+                        {entry.findings && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Activity className="w-4 h-4 text-muted-foreground" />
+                              <p className="text-xs font-medium text-muted-foreground">Findings</p>
+                            </div>
+                            <p className="text-sm text-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-md">
+                              {entry.findings}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Treatment */}
+                        {entry.treatment && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Droplets className="w-4 h-4 text-muted-foreground" />
+                              <p className="text-xs font-medium text-muted-foreground">Treatment</p>
+                            </div>
+                            <p className="text-sm text-foreground bg-green-50 dark:bg-green-950/20 p-3 rounded-md">
+                              {entry.treatment}
+                            </p>
+                          </div>
+                        )}
+                        
+                        {/* Medications */}
+                        {hasMedications && (
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Pill className="w-4 h-4 text-muted-foreground" />
+                              <p className="text-xs font-medium text-muted-foreground">Medications</p>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {entry.medications.map((med: string, idx: number) => (
+                                <span 
+                                  key={idx} 
+                                  className="text-xs bg-primary/10 text-primary px-2.5 py-1 rounded-full border border-primary/20"
+                                >
+                                  {med}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )
               })}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border rounded-lg">
+            <div className="flex flex-col items-center justify-center py-12 text-center border border-dashed border-border rounded-lg bg-muted/20">
               <Stethoscope className="w-12 h-12 text-muted-foreground/50 mb-3" />
               <p className="text-muted-foreground">No medical history entries yet</p>
               <p className="text-xs text-muted-foreground mt-1">
@@ -734,7 +819,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
         isOpen={deleteModalOpen}
         title="Delete Medical Entry"
         description="Are you sure you want to delete this medical history entry? This action cannot be undone."
-        itemName={`Entry by ${entryDetails.doctorName} on ${entryDetails.date}`}
+        itemName={`Medical entry by ${history?.entries?.find((e: MedicalEntry) => e._id === entryToDelete)?.doctorName || 'Unknown'} on ${formatDate(history?.entries?.find((e: MedicalEntry) => e._id === entryToDelete)?.date || '')}`}
         onConfirm={handleDeleteEntry}
         onCancel={() => {
           setDeleteModalOpen(false)

@@ -24,6 +24,7 @@ export function PatientReferralModal({ isOpen, onClose, onSuccess, token, doctoN
     phones: [{ number: "", isPrimary: true }],
     patientEmail: "",
     patientDob: "",
+    patientNationality: "",
     patientIdNumber: "",
     patientAddress: "",
     patientAllergies: "",
@@ -67,6 +68,20 @@ export function PatientReferralModal({ isOpen, onClose, onSuccess, token, doctoN
 
     setLoading(true)
     try {
+      // Calculate age from DOB
+      const calculateAge = (dob: string): number => {
+        const birthDate = new Date(dob)
+        const today = new Date()
+        let age = today.getFullYear() - birthDate.getFullYear()
+        const monthDiff = today.getMonth() - birthDate.getMonth()
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--
+        }
+        
+        return Math.max(0, age)
+      }
+
       const res = await fetch("/api/patient-referrals", {
         method: "POST",
         headers: {
@@ -78,6 +93,8 @@ export function PatientReferralModal({ isOpen, onClose, onSuccess, token, doctoN
           patientPhones: formData.phones.filter((p) => p.number.trim()),
           patientEmail: formData.patientEmail || "",
           patientDob: formData.patientDob,
+          patientAge: calculateAge(formData.patientDob),
+          patientNationality: formData.patientNationality || "",
           patientIdNumber: formData.patientIdNumber || "",
           patientAddress: formData.patientAddress || "",
           patientAllergies: formData.patientAllergies ? formData.patientAllergies.split(",").map((a) => a.trim()) : [],
@@ -95,6 +112,7 @@ export function PatientReferralModal({ isOpen, onClose, onSuccess, token, doctoN
           phones: [{ number: "", isPrimary: true }],
           patientEmail: "",
           patientDob: "",
+          patientNationality: "",
           patientIdNumber: "",
           patientAddress: "",
           patientAllergies: "",
@@ -256,6 +274,18 @@ export function PatientReferralModal({ isOpen, onClose, onSuccess, token, doctoN
                 }`}
               />
               {errors.patientDob && <p className="text-xs text-destructive mt-1">{errors.patientDob}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">Nationality (optional)</label>
+              <input
+                type="text"
+                value={formData.patientNationality}
+                onChange={(e) => setFormData({ ...formData, patientNationality: e.target.value })}
+                disabled={loading}
+                className="w-full px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm"
+                placeholder="e.g., American"
+              />
             </div>
 
             <div>

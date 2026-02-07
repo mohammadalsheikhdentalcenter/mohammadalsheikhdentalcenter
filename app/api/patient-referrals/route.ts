@@ -49,6 +49,8 @@ export async function GET(request: NextRequest) {
         patientPhones: ref.patientPhones || [],
         patientEmail: ref.patientEmail,
         patientDob: ref.patientDob,
+        patientAge: ref.patientAge,
+        patientNationality: ref.patientNationality,
         patientIdNumber: ref.patientIdNumber,
         patientAddress: ref.patientAddress,
         patientInsuranceProvider: ref.patientInsuranceProvider,
@@ -94,6 +96,8 @@ export async function POST(request: NextRequest) {
       patientPhones,
       patientEmail,
       patientDob,
+      patientAge,
+      patientNationality,
       patientIdNumber,
       patientAddress,
       patientInsuranceProvider,
@@ -107,6 +111,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Patient name, phone, and DOB are required" }, { status: 400 })
     }
 
+    // Calculate age from DOB
+    const calculateAge = (dobString: string): number => {
+      try {
+        const birthDate = new Date(dobString)
+        const today = new Date()
+        let age = today.getFullYear() - birthDate.getFullYear()
+        const monthDiff = today.getMonth() - birthDate.getMonth()
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--
+        }
+        
+        return Math.max(0, age)
+      } catch (error) {
+        console.error('Error calculating age:', error)
+        return 0
+      }
+    }
+
     const referral = await PatientReferralRequest.create({
       doctorId: payload.userId,
       doctorName: payload.name,
@@ -114,6 +137,8 @@ export async function POST(request: NextRequest) {
       patientPhones,
       patientEmail: patientEmail || "",
       patientDob,
+      patientAge: patientAge || calculateAge(patientDob),
+      patientNationality: patientNationality || "",
       patientIdNumber: patientIdNumber || "",
       patientAddress: patientAddress || "",
       patientInsuranceProvider: patientInsuranceProvider || "",
@@ -135,6 +160,8 @@ export async function POST(request: NextRequest) {
         patientPhones: referral.patientPhones || [],
         patientEmail: referral.patientEmail,
         patientDob: referral.patientDob,
+        patientAge: referral.patientAge,
+        patientNationality: referral.patientNationality,
         patientIdNumber: referral.patientIdNumber,
         patientAddress: referral.patientAddress,
         patientInsuranceProvider: referral.patientInsuranceProvider,

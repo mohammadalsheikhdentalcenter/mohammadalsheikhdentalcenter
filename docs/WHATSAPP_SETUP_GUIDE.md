@@ -33,23 +33,23 @@
 4. Copy the **Access Token**
 
 #### API URL
-```
+\`\`\`
 https://graph.instagram.com/v18.0/{PHONE_NUMBER_ID}/messages
-```
+\`\`\`
 
 ### 1.3 Configure Webhook
 
 #### Webhook URL
 Your webhook endpoint:
-```
+\`\`\`
 https://yourdomain.com/api/whatsapp/webhook
-```
+\`\`\`
 
 #### Webhook Verify Token
 Create a random string for security (e.g., `abc123xyz789`):
-```
+\`\`\`
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=abc123xyz789
-```
+\`\`\`
 
 #### Setup Webhook in Meta Dashboard
 1. Go to App Settings > Basic
@@ -66,7 +66,7 @@ WHATSAPP_WEBHOOK_VERIFY_TOKEN=abc123xyz789
 
 Add these to your `.env.local` file:
 
-```env
+\`\`\`env
 # WhatsApp Cloud API
 WHATSAPP_API_URL=https://graph.instagram.com/v18.0/102345678901234567/messages
 WHATSAPP_ACCESS_TOKEN=your_long_access_token_here
@@ -77,19 +77,19 @@ MONGODB_URI=mongodb://...
 
 # JWT (already configured)
 JWT_SECRET=your_secret_key
-```
+\`\`\`
 
 ## Step 3: Test the Setup
 
 ### Test Webhook Verification
-```bash
+\`\`\`bash
 curl -X GET "http://localhost:3000/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=abc123xyz789&hub.challenge=test_challenge"
-```
+\`\`\`
 
 Expected response: `test_challenge`
 
 ### Test Sending Message
-```bash
+\`\`\`bash
 curl -X POST "http://localhost:3000/api/whatsapp/messages" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -101,10 +101,10 @@ curl -X POST "http://localhost:3000/api/whatsapp/messages" \
     "messageType": "text",
     "whatsappBusinessPhoneNumberId": "102345678901234567"
   }'
-```
+\`\`\`
 
 ### Test Incoming Message (Webhook)
-```bash
+\`\`\`bash
 curl -X POST "http://localhost:3000/api/whatsapp/webhook" \
   -H "Content-Type: application/json" \
   -d '{
@@ -125,7 +125,7 @@ curl -X POST "http://localhost:3000/api/whatsapp/webhook" \
       }]
     }]
   }'
-```
+\`\`\`
 
 ## Step 4: Access the Inbox
 
@@ -148,9 +148,9 @@ curl -X POST "http://localhost:3000/api/whatsapp/webhook" \
 ### Problem: Webhook not receiving messages
 
 **Check 1: Webhook URL is accessible**
-```bash
+\`\`\`bash
 curl https://yourdomain.com/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=abc123xyz789&hub.challenge=test
-```
+\`\`\`
 
 Should return: `test`
 
@@ -158,19 +158,19 @@ Should return: `test`
 Make sure `WHATSAPP_WEBHOOK_VERIFY_TOKEN` in env matches what you set in Meta dashboard
 
 **Check 3: Check webhook logs**
-```javascript
+\`\`\`javascript
 // Add this to webhook route to debug
 console.log("[v0] Webhook received:", JSON.stringify(body, null, 2));
-```
+\`\`\`
 
 ### Problem: Messages not sending
 
 **Check 1: Access token is valid**
-```bash
+\`\`\`bash
 curl -X GET \
   "https://graph.instagram.com/v18.0/me?access_token=YOUR_TOKEN" \
   -H "Content-Type: application/json"
-```
+\`\`\`
 
 Should return your app info, not an error.
 
@@ -188,7 +188,7 @@ WhatsApp has rate limits. Wait between requests if getting `429` errors.
 
 **Check 1: Chat creation**
 Manually create chat:
-```bash
+\`\`\`bash
 curl -X POST "http://localhost:3000/api/whatsapp/chats" \
   -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
@@ -198,14 +198,14 @@ curl -X POST "http://localhost:3000/api/whatsapp/chats" \
     "patientName": "Patient Name",
     "whatsappBusinessPhoneNumberId": "102345678901234567"
   }'
-```
+\`\`\`
 
 **Check 2: Patient exists**
 Verify patient ID is valid in MongoDB:
-```javascript
+\`\`\`javascript
 // In MongoDB shell
 db.patients.findOne({ _id: ObjectId("patient_id") })
-```
+\`\`\`
 
 ### Problem: "Unauthorized" errors
 
@@ -214,36 +214,36 @@ Token should be stored in sessionStorage during login.
 
 **Check 2: User role correct**
 Only admin and receptionist have access. Check:
-```javascript
+\`\`\`javascript
 // In browser console
 sessionStorage.getItem("user") // Should show role
-```
+\`\`\`
 
 ## Performance Optimization
 
 ### Enable Message Indexing
-```javascript
+\`\`\`javascript
 // Already configured in schema, but verify:
 db.whatsappmessages.createIndex({ chatId: 1, createdAt: -1 })
 db.whatsappmessages.createIndex({ whatsappMessageId: 1 }, { sparse: true })
-```
+\`\`\`
 
 ### Configure Polling Interval
 Edit `/app/dashboard/inbox/[chatId]/page.tsx`:
-```typescript
+\`\`\`typescript
 const interval = setInterval(() => {
   fetchMessages()
 }, 3000) // Change 3000 to desired milliseconds
-```
+\`\`\`
 
 ### Cache Chat List
 Consider adding Redis cache for frequently accessed chats:
-```typescript
+\`\`\`typescript
 // Add to fetchChats:
 const cacheKey = `chats:${status}:${search}:${page}`;
 // Check Redis first
 // If miss, fetch from DB and cache
-```
+\`\`\`
 
 ## Production Deployment
 
@@ -258,7 +258,7 @@ const cacheKey = `chats:${status}:${search}:${page}`;
 3. Deploy
 
 ### Self-Hosted (Docker)
-```dockerfile
+\`\`\`dockerfile
 FROM node:18-alpine
 
 WORKDIR /app
@@ -273,28 +273,28 @@ RUN npm run build
 EXPOSE 3000
 
 CMD ["npm", "start"]
-```
+\`\`\`
 
-```bash
+\`\`\`bash
 docker run -e WHATSAPP_API_URL=... -e WHATSAPP_ACCESS_TOKEN=... your-image
-```
+\`\`\`
 
 ## Monitoring
 
 ### Check Health
-```bash
+\`\`\`bash
 curl https://yourdomain.com/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=YOUR_TOKEN&hub.challenge=health_check
-```
+\`\`\`
 
 ### Monitor Webhook Logs
-```javascript
+\`\`\`javascript
 db.whatsappwebhooklogs.find().sort({ createdAt: -1 }).limit(100)
-```
+\`\`\`
 
 ### Check Failed Messages
-```javascript
+\`\`\`javascript
 db.whatsappmessages.find({ status: "failed" }).pretty()
-```
+\`\`\`
 
 ## Support
 

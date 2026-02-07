@@ -3,10 +3,18 @@
 import { useState, useEffect } from "react"
 import { toast } from "react-hot-toast"
 import { Save, RotateCcw, History } from "lucide-react"
+import { ToothChartResultsTable } from "./tooth-chart-results-table"
+import { ToothChartModal } from "./tooth-chart-modal"
+import { ToothChartVisual } from "./tooth-chart-visual"
 
 interface ToothStatus {
   status: "healthy" | "cavity" | "filling" | "root-canal" | "missing" | "implant"
+  diagnosis: string
+  procedure: string
+  fillingType: string
   notes: string
+  sides?: string[]
+  date?: string
   lastUpdated: Date
 }
 
@@ -33,33 +41,58 @@ export function ToothChart({ patientId, token, onSave }: ToothChartProps) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
   const [chartHistory, setChartHistory] = useState<any[]>([])
   const [showHistory, setShowHistory] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [modalToothNumber, setModalToothNumber] = useState<number | null>(null)
 
   useEffect(() => {
     fetchToothChart()
   }, [patientId])
 
+  const initializeTeeth = () => {
+    const newTeeth: Record<number, ToothStatus> = {}
+    // FDI numbering: 1-32
+    for (let i = 1; i <= 32; i++) {
+      newTeeth[i] = {
+        status: "healthy",
+        diagnosis: "",
+        procedure: "",
+        fillingType: "",
+        notes: "",
+        sides: [],
+        date: "",
+        lastUpdated: new Date(),
+      }
+    }
+    return newTeeth
+  }
+
   const fetchToothChart = async () => {
     try {
+      // Initialize with empty teeth first
+      const initialTeeth = initializeTeeth()
+      
       const res = await fetch(`/api/tooth-chart?patientId=${patientId}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
         const data = await res.json()
-        if (data.toothChart) {
-          setTeeth(data.toothChart.teeth || {})
+        if (data.toothChart && data.toothChart.teeth) {
+          // Merge fetched data with initialized teeth
+          const mergedTeeth = { ...initialTeeth, ...data.toothChart.teeth }
+          setTeeth(mergedTeeth)
           setOverallNotes(data.toothChart.overallNotes || "")
         } else {
-          // Initialize empty chart
-          const newTeeth: Record<number, ToothStatus> = {}
-          for (let i = 1; i <= 32; i++) {
-            newTeeth[i] = { status: "healthy", notes: "", lastUpdated: new Date() }
-          }
-          setTeeth(newTeeth)
+          setTeeth(initialTeeth)
         }
         setChartHistory(data.chartHistory || [])
+      } else {
+        // If fetch fails, initialize with empty teeth
+        setTeeth(initialTeeth)
       }
     } catch (error) {
       console.error("Error fetching tooth chart:", error)
+      // Initialize with empty teeth on error
+      setTeeth(initializeTeeth())
     } finally {
       setLoading(false)
     }
@@ -82,6 +115,39 @@ export function ToothChart({ patientId, token, onSave }: ToothChartProps) {
       [toothNumber]: {
         ...prev[toothNumber],
         notes,
+        lastUpdated: new Date(),
+      },
+    }))
+  }
+
+  const handleToothDiagnosisChange = (toothNumber: number, diagnosis: string) => {
+    setTeeth((prev) => ({
+      ...prev,
+      [toothNumber]: {
+        ...prev[toothNumber],
+        diagnosis,
+        lastUpdated: new Date(),
+      },
+    }))
+  }
+
+  const handleToothProcedureChange = (toothNumber: number, procedure: string) => {
+    setTeeth((prev) => ({
+      ...prev,
+      [toothNumber]: {
+        ...prev[toothNumber],
+        procedure,
+        lastUpdated: new Date(),
+      },
+    }))
+  }
+
+  const handleToothFillingTypeChange = (toothNumber: number, fillingType: string) => {
+    setTeeth((prev) => ({
+      ...prev,
+      [toothNumber]: {
+        ...prev[toothNumber],
+        fillingType,
         lastUpdated: new Date(),
       },
     }))
@@ -122,6 +188,37 @@ export function ToothChart({ patientId, token, onSave }: ToothChartProps) {
     if (window.confirm("Are you sure you want to reset all changes?")) {
       fetchToothChart()
     }
+  }
+
+  const handleToothClick = (toothNumber: number) => {
+    setModalToothNumber(toothNumber)
+    setIsModalOpen(true)
+  }
+
+  const handleModalSave = (data: {
+    toothNumber: number
+    sides: string[]
+    procedure: string
+    diagnosis: string
+    comments: string
+    date: string
+  }) => {
+    setTeeth((prev) => ({
+      ...prev,
+      [data.toothNumber]: {
+        ...prev[data.toothNumber],
+        sides: data.sides,
+        procedure: data.procedure,
+        diagnosis: data.diagnosis,
+        notes: data.comments,
+        date: data.date,
+        status: "filling", // Mark as having procedure
+        lastUpdated: new Date(),
+      },
+    }))
+    setIsModalOpen(false)
+    setModalToothNumber(null)
+    toast.success("Tooth procedure saved")
   }
 
   if (loading) {
@@ -165,112 +262,20 @@ export function ToothChart({ patientId, token, onSave }: ToothChartProps) {
         </div>
       )}
 
-      {/* Tooth Grid */}
+      {/* Tooth Chart Visual */}
       <div className="space-y-4">
         <h3 className="font-semibold text-foreground">Tooth Chart</h3>
-
-        {/* Upper Teeth */}
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground font-medium">Upper Teeth</p>
-          <div className="grid grid-cols-8 gap-2">
-            {Array.from({ length: 16 }, (_, i) => i + 1).map((toothNum) => (
-              <button
-                key={toothNum}
-                onClick={() => setSelectedTooth(selectedTooth === toothNum ? null : toothNum)}
-                className={`aspect-square rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xs transition-all relative group overflow-hidden ${
-                  teeth[toothNum]
-                    ? TOOTH_STATUSES.find((s) => s.value === teeth[toothNum].status)?.color || "bg-gray-100"
-                    : "bg-gray-100"
-                } ${selectedTooth === toothNum ? "ring-2 ring-primary" : ""}`}
-              >
-                <img
-                  src={`/teeth/tooth${toothNum}.jpg`}
-                  alt={`Tooth ${toothNum}`}
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bottom-0.5 text-[10px] font-bold bg-black/50 text-white px-1 rounded">
-                  {toothNum}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Lower Teeth */}
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground font-medium">Lower Teeth</p>
-          <div className="grid grid-cols-8 gap-2">
-            {Array.from({ length: 16 }, (_, i) => i + 17).map((toothNum) => (
-              <button
-                key={toothNum}
-                onClick={() => setSelectedTooth(selectedTooth === toothNum ? null : toothNum)}
-                className={`aspect-square rounded-lg border-2 flex flex-col items-center justify-center font-bold text-xs transition-all relative group overflow-hidden ${
-                  teeth[toothNum]
-                    ? TOOTH_STATUSES.find((s) => s.value === teeth[toothNum].status)?.color || "bg-gray-100"
-                    : "bg-gray-100"
-                } ${selectedTooth === toothNum ? "ring-2 ring-primary" : ""}`}
-              >
-                <img
-                  src={`/teeth/tooth${toothNum}.jpg`}
-                  alt={`Tooth ${toothNum}`}
-                  className="w-full h-full object-cover"
-                />
-                <span className="absolute bottom-0.5 text-[10px] font-bold bg-black/50 text-white px-1 rounded">
-                  {toothNum}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Selected Tooth Details */}
-      {selectedTooth && teeth[selectedTooth] && (
-        <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="w-24 h-24 rounded-lg border-2 border-border overflow-hidden bg-gray-100">
-              <img
-                src={`/teeth/tooth${selectedTooth}.jpg`}
-                alt={`Tooth ${selectedTooth}`}
-                className="w-full h-full object-cover"
-              />
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground">Tooth #{selectedTooth} Details</h4>
-              <p className="text-sm text-muted-foreground">Status: {teeth[selectedTooth].status}</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Status</label>
-            <select
-              value={teeth[selectedTooth].status}
-              onChange={(e) => handleToothStatusChange(selectedTooth, e.target.value)}
-              className="w-full px-3 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm"
-            >
-              {TOOTH_STATUSES.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">Notes</label>
-            <textarea
-              value={teeth[selectedTooth].notes}
-              onChange={(e) => handleToothNotesChange(selectedTooth, e.target.value)}
-              placeholder="Add notes about this tooth..."
-              className="w-full px-3 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm"
-              rows={3}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Overall Notes */}
-      <div className="space-y-2">
+        <ToothChartVisual
+          teeth={teeth}
+          onToothClick={handleToothClick}
+          readOnly={false}
+          onToothStatusChange={handleToothStatusChange}
+          onToothDiagnosisChange={handleToothDiagnosisChange}
+          onToothProcedureChange={handleToothProcedureChange}
+          onToothFillingTypeChange={handleToothFillingTypeChange}
+          onToothNotesChange={handleToothNotesChange}
+        />
+         <div className="space-y-2">
         <label className="text-sm font-medium text-foreground">Overall Notes</label>
         <textarea
           value={overallNotes}
@@ -280,6 +285,36 @@ export function ToothChart({ patientId, token, onSave }: ToothChartProps) {
           rows={4}
         />
       </div>
+      </div>
+      
+
+      {/* Tooth Chart Modal */}
+      <ToothChartModal
+        isOpen={isModalOpen}
+        toothNumber={modalToothNumber}
+        existingData={
+          modalToothNumber && teeth[modalToothNumber]
+            ? {
+                sides: teeth[modalToothNumber].sides,
+                procedure: teeth[modalToothNumber].procedure,
+                diagnosis: teeth[modalToothNumber].diagnosis,
+                comments: teeth[modalToothNumber].notes,
+                date: teeth[modalToothNumber].date,
+              }
+            : undefined
+        }
+        onClose={() => {
+          setIsModalOpen(false)
+          setModalToothNumber(null)
+        }}
+        onSave={handleModalSave}
+      />
+
+      {/* Tooth Chart Results Table */}
+      
+
+     
+     
 
       {/* Action Buttons */}
       <div className="flex gap-2 flex-wrap">
@@ -299,6 +334,7 @@ export function ToothChart({ patientId, token, onSave }: ToothChartProps) {
           Reset
         </button>
       </div>
+      <ToothChartResultsTable teeth={teeth} />
     </div>
   )
 }

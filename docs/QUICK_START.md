@@ -15,11 +15,11 @@
 
 Update `.env.local`:
 
-```env
+\`\`\`env
 WHATSAPP_API_URL=https://graph.instagram.com/v18.0/YOUR_PHONE_NUMBER_ID/messages
 WHATSAPP_ACCESS_TOKEN=YOUR_ACCESS_TOKEN
 WHATSAPP_WEBHOOK_VERIFY_TOKEN=any_random_string_123
-```
+\`\`\`
 
 ### Step 3: Configure Webhook (2 minutes)
 
@@ -31,10 +31,10 @@ In Meta Dashboard > App Settings > Webhooks:
 
 ### Step 4: Deploy
 
-```bash
+\`\`\`bash
 npm run build
 npm start
-```
+\`\`\`
 
 ## Test It
 
@@ -53,9 +53,9 @@ npm start
 ## Verify It's Working
 
 ### Check Webhook Verification
-```bash
+\`\`\`bash
 curl "http://localhost:3000/api/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=any_random_string_123&hub.challenge=test"
-```
+\`\`\`
 
 Should return: `test`
 
@@ -66,11 +66,11 @@ Should return: `test`
 4. Check status updates
 
 ### Check Database
-```bash
+\`\`\`bash
 # In MongoDB
 db.whatsappchat.find()      # Should have chats
 db.whatsappmessages.find()  # Should have messages
-```
+\`\`\`
 
 ## Common Issues
 
@@ -84,7 +84,7 @@ db.whatsappmessages.find()  # Should have messages
 
 ## Environment Variables Explained
 
-```env
+\`\`\`env
 # Your WhatsApp Business Phone Number ID (from Meta dashboard)
 WHATSAPP_API_URL=https://graph.instagram.com/v18.0/102345678901234567/messages
 
@@ -97,7 +97,7 @@ WHATSAPP_WEBHOOK_VERIFY_TOKEN=my_super_secret_webhook_token
 # Already configured
 MONGODB_URI=mongodb://...
 JWT_SECRET=your_secret_key
-```
+\`\`\`
 
 ## File Locations
 
@@ -133,14 +133,14 @@ JWT_SECRET=your_secret_key
 ## Deployment
 
 ### Vercel
-```bash
+\`\`\`bash
 # Add environment variables in Vercel dashboard
 # Then deploy:
 git push
-```
+\`\`\`
 
 ### Self-Hosted
-```bash
+\`\`\`bash
 # Build
 npm run build
 
@@ -150,7 +150,7 @@ npm start
 # Or Docker
 docker build -t clinic .
 docker run -e WHATSAPP_API_URL=... your-app
-```
+\`\`\`
 
 ## Support
 
@@ -162,29 +162,29 @@ docker run -e WHATSAPP_API_URL=... your-app
 ## Verify Everything Works
 
 ### 1. Check Auth
-```bash
+\`\`\`bash
 # Login and check sessionStorage in browser console
 console.log(sessionStorage.getItem("token"))
 console.log(sessionStorage.getItem("user"))
-```
+\`\`\`
 
 ### 2. Check Database Connection
-```bash
+\`\`\`bash
 # Visit dashboard
 # If it loads, database is connected
-```
+\`\`\`
 
 ### 3. Check Webhook
-```bash
+\`\`\`bash
 # Send message from WhatsApp
 # Check if it appears in inbox within 5 seconds
-```
+\`\`\`
 
 ### 4. Check Message Sending
-```bash
+\`\`\`bash
 # Reply in inbox
 # Check if you receive on WhatsApp within 5 seconds
-```
+\`\`\`
 
 ## That's It! 🎉
 

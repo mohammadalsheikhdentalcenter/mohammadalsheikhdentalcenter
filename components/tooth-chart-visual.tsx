@@ -4,6 +4,9 @@ import { useState } from "react"
 
 interface ToothStatus {
   status: string
+  diagnosis?: string
+  procedure?: string
+  fillingType?: string
   notes?: string
 }
 
@@ -12,22 +15,23 @@ interface ToothChartProps {
   onToothClick: (toothNumber: number) => void
   readOnly?: boolean
   onToothStatusChange?: (toothNumber: number, newStatus: string) => void
+  onToothDiagnosisChange?: (toothNumber: number, diagnosis: string) => void
+  onToothProcedureChange?: (toothNumber: number, procedure: string) => void
+  onToothFillingTypeChange?: (toothNumber: number, fillingType: string) => void
+  onToothNotesChange?: (toothNumber: number, notes: string) => void
 }
 
-const TREATMENT_OPTIONS = [
-  { value: "healthy", label: "Healthy" },
-  { value: "cavity", label: "Cavity" },
-  { value: "filling", label: "Filling" },
-  { value: "root_canal", label: "Root Canal" },
-  { value: "crown", label: "Crown" },
-  { value: "implant", label: "Implant" },
-  { value: "treated", label: "Treated" },
-  { value: "missing", label: "Missing" },
-]
-
-export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToothStatusChange }: ToothChartProps) {
+export function ToothChartVisual({ 
+  teeth, 
+  onToothClick, 
+  readOnly = false, 
+  onToothStatusChange,
+  onToothDiagnosisChange,
+  onToothProcedureChange,
+  onToothFillingTypeChange,
+  onToothNotesChange
+}: ToothChartProps) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null)
-  const [openDropdown, setOpenDropdown] = useState<number | null>(null)
 
   // Image mapping
   const getToothImageNumber = (toothNumber: number): number => {
@@ -69,86 +73,65 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
   }
 
   const getToothColor = (status: string) => {
-    const colors: Record<string, string> = {
-      healthy: "#10b981",
-      cavity: "#ef4444",
-      missing: "#9ca3af",
-      filling: "#f59e0b",
-      root_canal: "#f97316",
-      crown: "#8b5cf6",
-      implant: "#3b82f6",
-      treated: "#06b6d4",
+    // Blue (#3b82f6) for all treated teeth (has procedure)
+    // Gray for healthy/no procedure
+    const hasProcedure = status !== "healthy" && status !== "missing"
+    if (hasProcedure) {
+      return "#3b82f6" // Blue color for all procedures
     }
-    const normalizedStatus = status.replace("-", "_")
-    return colors[normalizedStatus] || "#3b82f6"
+    return "#d1d5db" // Light gray for healthy/no procedure
   }
 
   const getStatusDisplayName = (status: string) => {
-    const statusNames: Record<string, string> = {
-      healthy: "Healthy",
-      cavity: "Cavity",
-      missing: "Missing",
-      filling: "Filling",
-      root_canal: "Root Canal",
-      crown: "Crown",
-      implant: "Implant",
-      treated: "Treated",
+    // Unified display name for all procedures
+    if (status !== "healthy" && status !== "missing") {
+      return "Procedure Done"
     }
-    return statusNames[status] || status
+    return status === "healthy" ? "Healthy" : "Missing"
   }
 
   const getToothIndicator = (status: string) => {
-    switch (status) {
-      case "filling":
-        return "▓"
-      case "implant":
-        return "⊙"
-      case "missing":
-        return "✕"
-      case "cavity":
-        return "●"
-      default:
-        return ""
-    }
+    // No indicators needed - single color indicates procedures
+    return ""
   }
 
   // Tooth names based on FDI numbering
   const getToothName = (toothNumber: number): string => {
     const toothNames: Record<number, string> = {
-      11: "(R)Central Incisor",
-      12: "(R)Lateral Incisor",
-      13: "(R)Cuspid (Canine)",
-      14: "(R)First Bicuspid",
-      15: "(R)Second Bicuspid",
-      16: "(R)First Molar",
-      17: "(R)Second Molar",
-      18: "(R)Third Molar",
-      21: "(L)Central Incisor",
-      22: "(L)Lateral Incisor",
-      23: "(L)Cuspid (Canine)",
-      24: "(L)First Bicuspid",
-      25: "(L)Second Bicuspid",
-      26: "(L)First Molar",
-      27: "(L)Second Molar",
-      28: "(L)Third Molar",
-      31: "(L)Central Incisor",
-      32: "(L)Lateral Incisor",
-      33: "(L)Cuspid (Canine)",
-      34: "(L)First Bicuspid",
-      35: "(L)Second Bicuspid",
-      36: "(L)First Molar",
-      37: "(L)Second Molar",
-      38: "(L)Third Molar",
-      41: "(R)Central Incisor",
-      42: "(R)Lateral Incisor",
-      43: "(R)Cuspid (Canine)",
-      44: "(R)First Bicuspid",
-      45: "(R)Second Bicuspid",
-      46: "(R)First Molar",
-      47: "(R)Second Molar",
-      48: "(R)Third Molar",
+      11: "Upper Right Central Incisor",
+      12: "Upper Right Lateral Incisor",
+      13: "Upper Right Canine",
+      14: "Upper Right First Premolar",
+      15: "Upper Right Second Premolar",
+      16: "Upper Right First Molar",
+      17: "Upper Right Second Molar",
+      18: "Upper Right Third Molar",
+      21: "Upper Left Central Incisor",
+      22: "Upper Left Lateral Incisor",
+      23: "Upper Left Canine",
+      24: "Upper Left First Premolar",
+      25: "Upper Left Second Premolar",
+      26: "Upper Left First Molar",
+      27: "Upper Left Second Molar",
+      28: "Upper Left Third Molar",
+      31: "Lower Left Central Incisor",
+      32: "Lower Left Lateral Incisor",
+      33: "Lower Left Canine",
+      34: "Lower Left First Premolar",
+      35: "Lower Left Second Premolar",
+      36: "Lower Left First Molar",
+      37: "Lower Left Second Molar",
+      38: "Lower Left Third Molar",
+      41: "Lower Right Central Incisor",
+      42: "Lower Right Lateral Incisor",
+      43: "Lower Right Canine",
+      44: "Lower Right First Premolar",
+      45: "Lower Right Second Premolar",
+      46: "Lower Right First Molar",
+      47: "Lower Right Second Molar",
+      48: "Lower Right Third Molar",
     }
-    return toothNames[toothNumber] || ""
+    return toothNames[toothNumber] || `Tooth ${toothNumber}`
   }
 
   // Tooth image rendering
@@ -184,10 +167,12 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
     >
       {toothNumbers.map((toothNum) => {
         const toothStatus = teeth[toothNum]?.status || "healthy"
-        const toothNotes = teeth[toothNum]?.notes || ""
+        const toothName = getToothName(toothNum)
         const statusDisplayName = getStatusDisplayName(toothStatus)
         const indicator = getToothIndicator(toothStatus)
         const isTreated = toothStatus !== "healthy" && toothStatus !== "missing"
+        const isMissing = toothStatus === "missing"
+        const isHealthy = toothStatus === "healthy"
 
         return (
           <div key={toothNum} className="relative flex flex-col items-center">
@@ -195,7 +180,7 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
               <button
                 onClick={() => {
                   setSelectedTooth(toothNum)
-                  setOpenDropdown(openDropdown === toothNum ? null : toothNum)
+                  onToothClick(toothNum)
                 }}
                 disabled={readOnly}
                 className={`relative h-16 sm:h-20 md:h-28 w-full rounded-lg flex flex-col items-center justify-center transition-all overflow-visible border-2 sm:border-4 group
@@ -206,6 +191,13 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
                   borderColor: getToothColor(toothStatus),
                 }}
               >
+                {/* Tooth number label - placed in top left corner */}
+                <div className="absolute top-0 left-0 transform -translate-y-1/2 -translate-x-1/4 z-10">
+                  <div className="font-bold text-gray-700 bg-white rounded-full w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 flex items-center justify-center text-xs sm:text-xs shadow-sm border border-gray-300">
+                    {toothNum}
+                  </div>
+                </div>
+
                 {/* Tooth image */}
                 <div className="w-full h-full">
                   <ToothImage toothNumber={toothNum} status={toothStatus} />
@@ -220,50 +212,25 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
                   </div>
                 )}
 
-                {/* Tooltip - responsive positioning */}
-                <div className="hidden sm:block absolute -top-12 sm:-top-14 md:-top-16 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white border border-gray-300 rounded-md shadow-md px-2 py-1 text-center z-50 min-w-[120px]">
-                  <p className="text-red-600 font-semibold text-xs">{toothNum}</p>
-                  <p className="text-gray-700 text-[10px]">{getToothName(toothNum)}</p>
-                  <p
-                    className="text-gray-600 text-[10px] font-medium mt-1"
-                    style={{ color: getToothColor(toothStatus) }}
-                  >
-                    Status: {statusDisplayName}
-                  </p>
-                  {toothNotes && <p className="text-gray-600 text-[10px] mt-1">Notes: {toothNotes}</p>}
+                {/* Tooltip for all teeth - responsive positioning */}
+                <div className="hidden sm:block absolute -top-12 sm:-top-14 md:-top-16 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white border border-gray-300 rounded-md shadow-md px-3 py-2 text-center z-50 min-w-[180px] max-w-[220px]">
+                  <div className="font-semibold text-xs text-gray-800 mb-1">
+                    {toothName}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    {isMissing ? (
+                      <div className="font-medium text-amber-600">Status: Missing</div>
+                    ) : isTreated ? (
+                      <>
+                        <div className="font-medium text-indigo-600 mb-1">Status: Procedure Done</div>
+                      </>
+                    ) : (
+                      <div className="font-medium text-green-600">Status: Healthy</div>
+                    )}
+                  </div>
                 </div>
               </button>
-
-              {!readOnly && openDropdown === toothNum && (
-                <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 min-w-[100px]">
-                  {TREATMENT_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        onToothStatusChange?.(toothNum, option.value)
-                        setOpenDropdown(null)
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs transition-colors ${
-                        toothStatus === option.value
-                          ? "bg-primary text-primary-foreground font-semibold"
-                          : "text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
-
-            {isTreated && (
-              <div
-                className="text-white text-[10px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded mt-1 text-center whitespace-nowrap max-w-full"
-                style={{ backgroundColor: getToothColor(toothStatus) }}
-              >
-                {statusDisplayName}
-              </div>
-            )}
           </div>
         )
       })}
@@ -271,7 +238,7 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
   )
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6"> 
       {/* Upper Teeth */}
       <div>
         <h3 className="font-semibold text-foreground mb-2 sm:mb-3 text-sm md:text-base">Upper Teeth</h3>
@@ -290,22 +257,7 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
           "bg-green-50",
           "border-green-200",
         )}
-      </div>
-
-      {/* Legend - responsive grid */}
-      <div className="p-3 sm:p-4 bg-muted rounded-lg border border-border">
-        <h3 className="font-semibold text-foreground mb-3 text-sm md:text-base">Tooth Status Legend</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 sm:gap-3 text-xs">
-          <LegendItem color="#10b981" label="Healthy" />
-          <LegendItem color="#ef4444" label="Cavity" indicator="●" />
-          <LegendItem color="#9ca3af" label="Missing" dashed indicator="✕" />
-          <LegendItem color="#f59e0b" label="Filling" indicator="▓" />
-          <LegendItem color="#f97316" label="Root Canal" />
-          <LegendItem color="#8b5cf6" label="Crown" />
-          <LegendItem color="#3b82f6" label="Implant" indicator="⊙" />
-          <LegendItem color="#06b6d4" label="Treated" />
-        </div>
-      </div>
+      </div>  
 
       {/* Notation Guide - responsive layout */}
       <div className="p-3 sm:p-4 bg-amber-50 rounded-lg border border-amber-200">
@@ -321,29 +273,6 @@ export function ToothChartVisual({ teeth, onToothClick, readOnly = false, onToot
           </div>
         </div>
       </div>
-    </div>
-  )
-}
-
-function LegendItem({
-  color,
-  label,
-  dashed = false,
-  indicator,
-}: { color: string; label: string; dashed?: boolean; indicator?: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className={`w-4 h-4 rounded border-4 ${dashed ? "border-dashed" : ""} flex items-center justify-center`}
-        style={{ borderColor: color, backgroundColor: "#f8fafc" }}
-      >
-        {indicator && (
-          <span className="text-[12px] font-bold" style={{ color }}>
-            {indicator}
-          </span>
-        )}
-      </div>
-      <span className="text-foreground">{label}</span>
     </div>
   )
 }

@@ -73,3 +73,16 @@ export function getAllPhoneNumbers(patientData: any): string[] {
   // Remove duplicates and empty values
   return [...new Set(phoneNumbers.filter(Boolean))]
 }
+
+export function calculateAgeFromDOB(dob: string | Date): number {
+  const dobDate = typeof dob === "string" ? new Date(dob) : dob
+  const today = new Date()
+  let age = today.getFullYear() - dobDate.getFullYear()
+  const monthDiff = today.getMonth() - dobDate.getMonth()
+  
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dobDate.getDate())) {
+    age--
+  }
+  
+  return age
+}

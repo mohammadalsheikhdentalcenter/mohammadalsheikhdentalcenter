@@ -4,6 +4,77 @@ import { verifyToken } from "@/lib/auth"
 
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || ""
 const WHATSAPP_API_URL = process.env.WHATSAPP_API_URL || ""
+const CLOUDINARY_CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || ""
+const CLOUDINARY_UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || ""
+
+// Helper to upload media to WhatsApp Media API (official flow)
+async function uploadMediaToWhatsApp(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  phoneNumberId: string,
+): Promise<string | null> {
+  try {
+    const blob = new Blob([buffer], { type: mimeType })
+    const formData = new FormData()
+    formData.append("file", blob, fileName)
+    formData.append("type", mimeType)
+    formData.append("messaging_product", "whatsapp")
+
+    const mediaUrl = `${WHATSAPP_API_URL.replace("/messages", "")}/media`
+    const response = await fetch(mediaUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error?.message || "Media upload failed")
+    }
+
+    const data = await response.json()
+    return data.id || null // Return the media ID
+  } catch (error) {
+    console.error("[v0] WhatsApp media upload error:", error)
+    return null
+  }
+}
+
+// Helper to upload media to Cloudinary (for images display)
+async function uploadToCloudinary(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<string | null> {
+  try {
+    const blob = new Blob([buffer], { type: mimeType })
+    const formData = new FormData()
+    formData.append("file", blob, fileName)
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET)
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+      {
+        method: "POST",
+        body: formData,
+      },
+    )
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error?.message || "Upload failed")
+    }
+
+    const data = await response.json()
+    return data.secure_url || null
+  } catch (error) {
+    console.error("[v0] Cloudinary upload error:", error)
+    return null
+  }
+}
 
 // ============================
 // GET MESSAGES
@@ -93,19 +164,60 @@ export async function POST(req: NextRequest) {
 
     const user = payload
 
-    const body = await req.json()
+    // Handle both JSON and FormData
+    let chatId: string = ""
+    let patientPhone: string = ""
+    let message: string = ""
+    let messageType: string = "text"
+    let whatsappBusinessPhoneNumberId: string = ""
+    let mediaType: string | null = null
+    let mediaBuffer: Buffer | null = null
 
-    const {
-      chatId,
-      patientPhone,
-      message,
-      messageType = "text",
-      whatsappBusinessPhoneNumberId,
-    } = body
+    const contentType = req.headers.get("content-type") || ""
 
-    if (!chatId || !patientPhone || !message || !whatsappBusinessPhoneNumberId) {
+    if (contentType.includes("application/json")) {
+      const body = await req.json()
+      chatId = body.chatId || ""
+      patientPhone = body.patientPhone || ""
+      message = body.message || ""
+      messageType = body.messageType || "text"
+      whatsappBusinessPhoneNumberId = body.whatsappBusinessPhoneNumberId || ""
+    } else if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData()
+      chatId = formData.get("chatId")?.toString() || ""
+      patientPhone = formData.get("patientPhone")?.toString() || ""
+      message = formData.get("message")?.toString() || ""
+      whatsappBusinessPhoneNumberId = formData.get("whatsappBusinessPhoneNumberId")?.toString() || ""
+      mediaType = formData.get("mediaType")?.toString() || null
+
+      const mediaFile = formData.get("media") as File | null
+      if (mediaFile) {
+        messageType = "media"
+        mediaBuffer = Buffer.from(await mediaFile.arrayBuffer())
+        
+        // Auto-detect PDF as document type
+        if (mediaFile.type === "application/pdf" || mediaFile.name?.endsWith(".pdf")) {
+          mediaType = "document"
+        } else if (mediaFile.type.startsWith("image/")) {
+          mediaType = "image"
+        }
+      }
+    } else {
+      return NextResponse.json({ error: "Invalid content type" }, { status: 400 })
+    }
+
+    // Validate required fields - message is optional for media
+    if (!chatId || !patientPhone || !whatsappBusinessPhoneNumberId) {
       return NextResponse.json(
-        { error: "Missing required fields: chatId, patientPhone, message, whatsappBusinessPhoneNumberId" },
+        { error: "Missing required fields: chatId, patientPhone, whatsappBusinessPhoneNumberId" },
+        { status: 400 },
+      )
+    }
+
+    // Message is required only for text messages
+    if (messageType === "text" && !message) {
+      return NextResponse.json(
+        { error: "Message text is required for text messages" },
         { status: 400 },
       )
     }
@@ -145,26 +257,57 @@ export async function POST(req: NextRequest) {
     // ============================
     // SAVE MESSAGE FIRST
     // ============================
-    const messageDoc = await WhatsAppMessage.create({
+    // Upload media first if present
+    let displayMediaUrl: string | null = null
+    let whatsappMediaId: string | null = null
+    const phoneNumberId = whatsappBusinessPhoneNumberId // Declare phoneNumberId here
+
+    if (mediaBuffer && mediaType) {
+      const fileName = `whatsapp-${Date.now()}.${mediaType === "document" ? "pdf" : mediaType}`
+      const mimeType = mediaType === "document" ? "application/pdf" : `${mediaType}/*`
+
+      // For images, upload to Cloudinary for display
+      if (mediaType === "image") {
+        displayMediaUrl = await uploadToCloudinary(mediaBuffer, fileName, mimeType)
+      }
+
+      // For documents, upload to WhatsApp Media API following official flow
+      if (mediaType === "document") {
+        whatsappMediaId = await uploadMediaToWhatsApp(mediaBuffer, fileName, mimeType, phoneNumberId)
+        if (whatsappMediaId) {
+          displayMediaUrl = whatsappMediaId // Store media ID for retrieval
+        }
+      }
+    }
+
+    // For media-only messages, use a space to satisfy MongoDB requirement
+    const messageBody = message || " "
+
+    const messageData: any = {
       chatId,
       patientId: resolvedPatientId,
       patientPhone: normalizedPhone,
       senderType: "business",
       senderName: user.name,
       messageType,
-      body: message,
+      body: messageBody,
+      mediaType,
+      mediaUrl: displayMediaUrl,
+      mediaData: mediaBuffer || undefined,
       sentBy: user.userId,
       sentByName: user.name,
       window24HourValid,
       status: "sent",
       createdAt: new Date(),
-    })
+    }
+
+    const messageDoc = await WhatsAppMessage.create(messageData)
 
     // ============================
     // SEND TO WHATSAPP
     // ============================
     try {
-      const payload = {
+      let payload: any = {
         messaging_product: "whatsapp",
         to: normalizedPhone.replace("+", ""),
         type: "text",
@@ -172,6 +315,34 @@ export async function POST(req: NextRequest) {
           preview_url: true,
           body: message,
         },
+      }
+
+      // Handle media messages - send actual media to WhatsApp
+      if (messageType === "media" && mediaBuffer && mediaType) {
+        // For images with Cloudinary URL
+        if (mediaType === "image" && displayMediaUrl) {
+          payload = {
+            messaging_product: "whatsapp",
+            to: normalizedPhone.replace("+", ""),
+            type: "image",
+            image: {
+              link: displayMediaUrl,
+              ...(message && { caption: message }),
+            },
+          }
+        }
+        // For documents with WhatsApp media ID
+        else if (mediaType === "document" && whatsappMediaId) {
+          payload = {
+            messaging_product: "whatsapp",
+            to: normalizedPhone.replace("+", ""),
+            type: "document",
+            document: {
+              id: whatsappMediaId,
+              ...(message && { caption: message }),
+            },
+          }
+        }
       }
 
       const response = await fetch(WHATSAPP_API_URL, {
@@ -187,25 +358,26 @@ export async function POST(req: NextRequest) {
 
       if (response.ok && data.messages?.[0]?.id) {
         const whatsappMessageId = data.messages[0].id
+        const cloudinaryUrl = displayMediaUrl // Declare cloudinaryUrl here
 
         await WhatsAppMessage.findByIdAndUpdate(messageDoc._id, {
           whatsappMessageId,
+          mediaUrl: cloudinaryUrl,
           status: "sent",
         })
 
         await WhatsAppChat.findByIdAndUpdate(chatId, {
-          lastMessage: message,
+          lastMessage: message || `[${mediaType} sent]`,
           lastMessageAt: new Date(),
           updatedAt: new Date(),
         })
 
+        const updatedMessage = await WhatsAppMessage.findById(messageDoc._id)
+
         return NextResponse.json(
           {
             success: true,
-            message: {
-              ...messageDoc.toObject(),
-              whatsappMessageId,
-            },
+            message: updatedMessage,
           },
           { status: 201 },
         )

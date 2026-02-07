@@ -319,6 +319,11 @@ export default function ForwardedRequestsPage() {
   }
 
   const createAppointmentAndCompleteReferral = async () => {
+    // Prevent multiple submissions
+    if (loading.createAppointment) {
+      return
+    }
+
     if (!selectedReferral || !validateAppointmentForm()) {
       toast.error("Please fix the errors in the form")
       return
@@ -1238,6 +1243,7 @@ export default function ForwardedRequestsPage() {
                             <h3 className="text-lg font-semibold text-foreground mb-4">Actions</h3>
                             <button
                               onClick={() => setShowAppointmentForm(true)}
+                              disabled={loading.createAppointment}
                               className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground px-4 py-3 rounded-lg transition-colors font-medium text-sm mb-3 cursor-pointer disabled:cursor-not-allowed"
                             >
                               <Calendar className="w-4 h-4" />

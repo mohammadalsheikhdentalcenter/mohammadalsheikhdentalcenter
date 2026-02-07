@@ -1,15 +1,16 @@
-//@ts-nocheck
+// @ts-nocheck
 "use client"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/components/auth-context"
 import { toast } from "react-hot-toast"
-import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, FileText as FileIcon } from "lucide-react"
+import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, X } from "lucide-react"
 import { AddDebtModal } from "@/components/add-debt-modal"
 import { AddPaymentModal } from "@/components/add-payment-modal"
 import { PaymentHistory } from "./payment-history"
 import { BillingChart } from "./billing-chart"
 import { EditRemainingBalanceModal } from "@/components/edit-remaining-balance-modal"
 import { PatientReportsSection } from "@/components/patient-reports-section"
+import { ToothChartResultsTable } from "@/components/tooth-chart-results-table"
 
 export function BillingDetailPage({ patient, onBack }: any) {
   const { token } = useAuth()
@@ -23,8 +24,11 @@ export function BillingDetailPage({ patient, onBack }: any) {
   const [showAddDebt, setShowAddDebt] = useState(false)
   const [showAddPayment, setShowAddPayment] = useState(false)
   const [showReports, setShowReports] = useState(false)
+  const [showToothChart, setShowToothChart] = useState(false) // Renamed from showChart
   const [showEditBalance, setShowEditBalance] = useState(false)
   const [selectedBillingId, setSelectedBillingId] = useState(null)
+  const [toothChart, setToothChart] = useState<any>(null)
+  const [chartLoading, setChartLoading] = useState(false)
 
   useEffect(() => {
     if (patient?.patientId) {
@@ -83,6 +87,64 @@ export function BillingDetailPage({ patient, onBack }: any) {
     }, 300)
   }
 
+  const fetchToothChart = async () => {
+    if (!patient?.patientId) return
+    
+    try {
+      setChartLoading(true)
+      const res = await fetch(`/api/tooth-chart?patientId=${patient.patientId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        const chart = data.toothChart || (data.charts && data.charts[0])
+        if (chart) {
+          // Build teeth object from procedures for visual display
+          const teethFromProcedures: Record<number, any> = {}
+          if (Array.isArray(chart.procedures) && chart.procedures.length > 0) {
+            chart.procedures.forEach((proc: any) => {
+              const toothNum = proc.toothNumber
+              if (toothNum && !teethFromProcedures[toothNum]) {
+                teethFromProcedures[toothNum] = {
+                  status: "filling",
+                  procedure: proc.procedure,
+                  diagnosis: proc.diagnosis,
+                  notes: proc.comments,
+                  date: proc.date,
+                  fillingType: proc.fillingType,
+                }
+              }
+            })
+          }
+          
+          setToothChart({
+            ...chart,
+            teeth: {
+              ...(chart.teeth || {}),
+              ...teethFromProcedures,
+            },
+          })
+        }
+      } else {
+        toast.error("Failed to load tooth chart")
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching tooth chart:", error)
+      toast.error("Failed to load tooth chart")
+    } finally {
+      setChartLoading(false)
+    }
+  }
+
+  const handleToggleToothChart = () => {
+    if (!showToothChart) {
+      // If showing for the first time, fetch the data
+      fetchToothChart();
+    }
+    setShowToothChart(!showToothChart);
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
@@ -97,13 +159,34 @@ export function BillingDetailPage({ patient, onBack }: any) {
               Back
             </button>
 
-            <div className="flex flex-col sm:flex-row sm:gap-2 gap-2 w-full justify-end">
+            <div className="flex flex-wrap gap-2 w-full sm:justify-end">
               <button
                 onClick={() => setShowReports(true)}
                 className="flex items-center justify-center gap-2 bg-muted hover:bg-muted/80 border border-border text-foreground px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer"
               >
-                <FileIcon className="w-4 h-4" />
+                <FileText className="w-4 h-4" />
                 View Reports
+              </button>
+
+              <button
+                onClick={handleToggleToothChart}
+                className={`flex items-center justify-center gap-2 border px-3 py-2 rounded-lg font-medium transition-all duration-200 cursor-pointer ${
+                  showToothChart
+                    ? "bg-accent hover:bg-accent/90 text-accent-foreground"
+                    : "bg-muted hover:bg-muted/80 border-border text-foreground"
+                }`}
+              >
+                {showToothChart ? (
+                  <>
+                    <X className="w-4 h-4" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <FileText className="w-4 h-4" />
+                    View Chart/Table
+                  </>
+                )}
               </button>
 
               <button
@@ -145,6 +228,40 @@ export function BillingDetailPage({ patient, onBack }: any) {
             </div>
           </div>
         </div>
+
+        {/* Tooth Chart Table - Shown below patient info */}
+        {showToothChart && (
+          <div className="mb-8 bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4 sm:mb-6">
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Tooth Chart - {patient?.name}</h2>
+                <button
+                  onClick={() => setShowToothChart(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {chartLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
+                  <p className="text-muted-foreground">Loading tooth chart...</p>
+                </div>
+              ) : toothChart?.procedures && toothChart.procedures.length > 0 ? (
+                <ToothChartResultsTable
+                  teeth={toothChart.teeth || {}}
+                  procedures={toothChart.procedures}
+                  onViewDetails={() => {}}
+                />
+              ) : (
+                <div className="bg-muted rounded-lg p-8 text-center">
+                  <p className="text-muted-foreground">No procedures recorded for this patient</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Loading State */}
         {loading ? (
@@ -289,6 +406,8 @@ export function BillingDetailPage({ patient, onBack }: any) {
             </div>
           </div>
         )}
+
+        {/* Removed the tooth chart modal */}
 
         {/* Modals */}
         {patient?.patientId && (

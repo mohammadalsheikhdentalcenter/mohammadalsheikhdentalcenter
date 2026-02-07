@@ -1,6 +1,8 @@
 //@ts-nocheck
 import { Appointment, connectDB } from "@/lib/db-server"
 import mongoose from "mongoose"
+import { NextRequest, NextResponse } from "next/server"
+import { verifyToken } from "@/lib/auth"
 
 /**
  * Server-side appointment validation (for API routes)
@@ -160,5 +162,53 @@ export async function validateAppointmentSchedulingServer(
       isValid: false,
       error: `Error validating appointment: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
+  }
+}
+
+/**
+ * POST handler for validating appointments
+ */
+export async function POST(request: NextRequest) {
+  try {
+    await connectDB()
+
+    const token = request.headers.get("authorization")?.split(" ")[1]
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const payload = verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
+    const { doctorId, date, time, duration = 30, excludeAppointmentId, roomNumber } = await request.json()
+
+    if (!doctorId || !date || !time) {
+      return NextResponse.json(
+        { error: "Doctor ID, date, and time are required" },
+        { status: 400 }
+      )
+    }
+
+    const validation = await validateAppointmentSchedulingServer(
+      doctorId,
+      date,
+      time,
+      duration,
+      excludeAppointmentId,
+      roomNumber
+    )
+
+    return NextResponse.json(validation)
+  } catch (error) {
+    console.error("[Validate API] Error:", error)
+    return NextResponse.json(
+      {
+        isValid: false,
+        error: `Error checking appointment availability: ${error instanceof Error ? error.message : "Unknown error"}`,
+      },
+      { status: 500 }
+    )
   }
 }

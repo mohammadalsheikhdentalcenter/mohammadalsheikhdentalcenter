@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
       phones,
       email,
       dob,
+      nationality,
       insuranceProvider,
       allergies = [],
       medicalConditions = [],
@@ -56,6 +57,25 @@ export async function POST(request: NextRequest) {
       insuranceNumber,
       photoUrl,
     } = await request.json()
+
+    // Calculate age from DOB
+    const calculateAge = (dobString: string): number => {
+      try {
+        const birthDate = new Date(dobString)
+        const today = new Date()
+        let age = today.getFullYear() - birthDate.getFullYear()
+        const monthDiff = today.getMonth() - birthDate.getMonth()
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--
+        }
+        
+        return Math.max(0, age)
+      } catch (error) {
+        console.error('Error calculating age:', error)
+        return 0
+      }
+    }
 
     // Validate critical credentials
     const missingCriticalCredentials = []
@@ -155,11 +175,15 @@ export async function POST(request: NextRequest) {
       formattedPhones[0].isPrimary = true
     }
 
+    const age = calculateAge(dob)
+
     // Create patient data object
     const patientData: any = {
       name,
       phones: formattedPhones,
       dob,
+      age: calculateAge(dob),
+      nationality: nationality || "",
       idNumber: idNumber.trim(),
       address: address || "",
       insuranceProvider: insuranceProvider || "",
@@ -453,4 +477,3 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     return NextResponse.json({ error: "Failed to delete patient" }, { status: 500 })
   }
 }
-

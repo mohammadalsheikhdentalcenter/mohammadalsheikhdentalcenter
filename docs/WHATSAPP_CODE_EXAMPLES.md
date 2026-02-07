@@ -5,7 +5,7 @@
 ### 1. Fetch All Chats
 
 **Frontend Code:**
-```typescript
+\`\`\`typescript
 import { fetchChats } from "@/lib/whatsapp-inbox"
 
 async function loadChats() {
@@ -17,18 +17,18 @@ async function loadChats() {
     console.error("Error:", error.message)
   }
 }
-```
+\`\`\`
 
 **cURL:**
-```bash
+\`\`\`bash
 curl -X GET "http://localhost:3000/api/whatsapp/chats?status=active&page=1&limit=50" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
+\`\`\`
 
 ### 2. Send Message to Patient
 
 **Frontend Code:**
-```typescript
+\`\`\`typescript
 import { sendMessage } from "@/lib/whatsapp-inbox"
 
 async function sendPatientMessage(chatId: string) {
@@ -49,10 +49,10 @@ async function sendPatientMessage(chatId: string) {
     console.error("Error:", error.message)
   }
 }
-```
+\`\`\`
 
 **cURL:**
-```bash
+\`\`\`bash
 curl -X POST "http://localhost:3000/api/whatsapp/messages" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -64,12 +64,12 @@ curl -X POST "http://localhost:3000/api/whatsapp/messages" \
     "messageType": "text",
     "whatsappBusinessPhoneNumberId": "102345678901234567"
   }'
-```
+\`\`\`
 
 ### 3. Fetch Chat Messages
 
 **Frontend Code:**
-```typescript
+\`\`\`typescript
 import { fetchMessages } from "@/lib/whatsapp-inbox"
 
 async function loadMessages(chatId: string) {
@@ -85,18 +85,18 @@ async function loadMessages(chatId: string) {
     console.error("Error:", error.message)
   }
 }
-```
+\`\`\`
 
 **cURL:**
-```bash
+\`\`\`bash
 curl -X GET "http://localhost:3000/api/whatsapp/messages?chatId=60d5ec49c1234567890abcde&page=1&limit=50" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
+\`\`\`
 
 ### 4. Create New Chat
 
 **Frontend Code:**
-```typescript
+\`\`\`typescript
 async function createChat(token: string, patientData: any) {
   try {
     const response = await fetch("/api/whatsapp/chats", {
@@ -120,10 +120,10 @@ async function createChat(token: string, patientData: any) {
     console.error("Error:", error)
   }
 }
-```
+\`\`\`
 
 **cURL:**
-```bash
+\`\`\`bash
 curl -X POST "http://localhost:3000/api/whatsapp/chats" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
@@ -133,12 +133,12 @@ curl -X POST "http://localhost:3000/api/whatsapp/chats" \
     "patientName": "Ahmed Khan",
     "whatsappBusinessPhoneNumberId": "102345678901234567"
   }'
-```
+\`\`\`
 
 ### 5. Update Chat Status
 
 **Frontend Code:**
-```typescript
+\`\`\`typescript
 import { updateChatStatus } from "@/lib/whatsapp-inbox"
 
 async function archiveChat(chatId: string) {
@@ -160,20 +160,20 @@ async function closeChat(chatId: string) {
     console.error("Error:", error.message)
   }
 }
-```
+\`\`\`
 
 **cURL:**
-```bash
+\`\`\`bash
 curl -X PATCH "http://localhost:3000/api/whatsapp/chats/60d5ec49c1234567890abcde" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"status": "archived"}'
-```
+\`\`\`
 
 ### 6. Get Chat Details
 
 **Frontend Code:**
-```typescript
+\`\`\`typescript
 import { fetchChat } from "@/lib/whatsapp-inbox"
 
 async function getChatDetails(chatId: string) {
@@ -192,19 +192,19 @@ async function getChatDetails(chatId: string) {
     console.error("Error:", error.message)
   }
 }
-```
+\`\`\`
 
 **cURL:**
-```bash
+\`\`\`bash
 curl -X GET "http://localhost:3000/api/whatsapp/chats/60d5ec49c1234567890abcde" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
-```
+\`\`\`
 
 ## React Component Examples
 
 ### Chat List Component
 
-```typescript
+\`\`\`typescript
 "use client"
 
 import { useEffect, useState } from "react"
@@ -254,11 +254,11 @@ export function ChatList() {
     </div>
   )
 }
-```
+\`\`\`
 
 ### Message Input Component
 
-```typescript
+\`\`\`typescript
 "use client"
 
 import { useState } from "react"
@@ -313,11 +313,11 @@ export function MessageInput({ chatId, patientId, patientPhone }: any) {
     </div>
   )
 }
-```
+\`\`\`
 
 ## Webhook Handler Example
 
-```typescript
+\`\`\`typescript
 // Handle incoming message from patient
 async function handleIncomingMessage(message: any, valueContext: any) {
   const messageId = message.id
@@ -358,22 +358,22 @@ async function handleIncomingMessage(message: any, valueContext: any) {
 
   console.log(`[v0] Message received from ${from}: ${body}`)
 }
-```
+\`\`\`
 
 ## Database Queries
 
 ### Find all unread messages
 
-```javascript
+\`\`\`javascript
 db.whatsappmessages.find({
   senderType: "patient",
   status: { $in: ["sent", "delivered"] }
 })
-```
+\`\`\`
 
 ### Get chat statistics
 
-```javascript
+\`\`\`javascript
 db.whatsappmessages.aggregate([
   {
     $group: {
@@ -383,27 +383,27 @@ db.whatsappmessages.aggregate([
     }
   }
 ])
-```
+\`\`\`
 
 ### Find failed messages
 
-```javascript
+\`\`\`javascript
 db.whatsappmessages.find({
   status: "failed"
 }).sort({ createdAt: -1 })
-```
+\`\`\`
 
 ### List chats outside 24-hour window
 
-```javascript
+\`\`\`javascript
 db.whatsappchat.find({
   window24HourEndsAt: { $lt: new Date() }
 })
-```
+\`\`\`
 
 ## Error Handling
 
-```typescript
+\`\`\`typescript
 async function sendMessageSafely(chatId: string, message: string) {
   try {
     const token = sessionStorage.getItem("token")
@@ -435,13 +435,13 @@ async function sendMessageSafely(chatId: string, message: string) {
     }
   }
 }
-```
+\`\`\`
 
 ## Testing
 
 ### Unit Test Example
 
-```typescript
+\`\`\`typescript
 import { describe, it, expect, beforeEach } from "vitest"
 import { fetchChats, sendMessage } from "@/lib/whatsapp-inbox"
 
@@ -469,21 +469,21 @@ describe("WhatsApp Inbox", () => {
     expect(result.success).toBe(true)
   })
 })
-```
+\`\`\`
 
 ## Performance Tips
 
 ### 1. Implement Pagination in Chat List
-```typescript
+\`\`\`typescript
 const limit = 20 // Load 20 chats at a time
 const page = 1
 const response = await fetch(
   `/api/whatsapp/chats?limit=${limit}&page=${page}`
 )
-```
+\`\`\`
 
 ### 2. Cache Message List
-```typescript
+\`\`\`typescript
 const [messagesCache, setMessagesCache] = useState({})
 
 async function getMessages(chatId: string) {
@@ -494,10 +494,10 @@ async function getMessages(chatId: string) {
   setMessagesCache(prev => ({...prev, [chatId]: data}))
   return data
 }
-```
+\`\`\`
 
 ### 3. Debounce Search
-```typescript
+\`\`\`typescript
 import { useCallback } from "react"
 
 const debouncedSearch = useCallback(
@@ -506,4 +506,4 @@ const debouncedSearch = useCallback(
   }, 300),
   []
 )
-```
+\`\`\`

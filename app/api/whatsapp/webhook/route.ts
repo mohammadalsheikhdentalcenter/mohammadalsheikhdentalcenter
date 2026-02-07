@@ -101,59 +101,81 @@ async function handleIncomingMessage(message: any, valueContext: any) {
     let messageBody = "";
     let mediaUrl = null;
     let mediaType = null;
+    let dbMessageType = "text";
 
     if (type === "text") {
       messageBody = message.text?.body || "";
+      dbMessageType = "text";
     } else if (type === "image") {
-      mediaUrl = message.image?.link || "";
+      mediaUrl = message.image?.url || message.image?.link || "";
       mediaType = "image";
-      messageBody = message.image?.caption || "[Image received]";
+      // Use caption if available, otherwise use space for DB (won't display in UI)
+      messageBody = message.image?.caption || " ";
+      dbMessageType = "media";
     } else if (type === "document") {
-      mediaUrl = message.document?.link || "";
+      mediaUrl = message.document?.url || message.document?.link || "";
       mediaType = "document";
-      messageBody = message.document?.filename || "[Document received]";
+      messageBody = message.document?.filename || " ";
+      dbMessageType = "media";
     } else if (type === "audio") {
-      mediaUrl = message.audio?.link || "";
+      mediaUrl = message.audio?.url || message.audio?.link || "";
       mediaType = "audio";
-      messageBody = "[Audio message received]";
+      messageBody = " ";
+      dbMessageType = "media";
     } else if (type === "video") {
-      mediaUrl = message.video?.link || "";
+      mediaUrl = message.video?.url || message.video?.link || "";
       mediaType = "video";
-      messageBody = message.video?.caption || "[Video received]";
+      // Use caption if available, otherwise use space for DB (won't display in UI)
+      messageBody = message.video?.caption || " ";
+      dbMessageType = "media";
     } else {
       messageBody = `[${type} message received]`;
     }
 
-    // Find or create chat (ONLY CHANGE HERE)
+    // Find or create chat - phone-based, not patient-dependent
     const normalizedPhone = from.startsWith("+") ? from : `+${from}`;
 
+    // Try to find associated patient (optional)
     const patient = await Patient.findOne({
       "phones.number": normalizedPhone,
-    });
+    }).catch(() => null);
 
     const patientId = patient?._id || null;
+    const patientName = patient?.name || valueContext.contacts?.[0]?.profile?.name || "Unknown Customer";
+
+    // Get WhatsApp profile picture and display name from webhook context
+    const whatsappContact = valueContext.contacts?.[0];
+    const whatsappProfilePictureUrl = whatsappContact?.profile?.picture_url || null;
+    const whatsappDisplayName = whatsappContact?.profile?.name || null;
+
+    // Prepare update data
+    const updateData: any = {
+      patientId: patientId || undefined,
+      patientPhone: normalizedPhone,
+      patientName,
+      whatsappBusinessPhoneNumberId:
+        valueContext.metadata?.phone_number_id || "unknown",
+      updatedAt: new Date(),
+    };
+
+    // Only add WhatsApp profile data if available
+    if (whatsappProfilePictureUrl) {
+      updateData.whatsappProfilePictureUrl = whatsappProfilePictureUrl;
+    }
+    if (whatsappDisplayName) {
+      updateData.whatsappDisplayName = whatsappDisplayName;
+    }
 
     let chat = await WhatsAppChat.findOneAndUpdate(
-      {
-        patientId,
-        patientPhone: normalizedPhone,
-      },
+      { patientPhone: normalizedPhone },
       {
         $setOnInsert: {
-          patientId,
-          patientPhone: normalizedPhone,
-          patientName: patient?.name || "Unknown Patient",
-          whatsappBusinessPhoneNumberId:
-            valueContext.metadata?.phone_number_id || "unknown",
-
           unreadCount: 0,
           lastMessage: "",
           lastMessageAt: null,
           createdAt: new Date(),
         },
-        $set: {
-          updatedAt: new Date(),
-        },
+        $set: updateData,
       },
       {
         new: true,
@@ -163,16 +185,26 @@ async function handleIncomingMessage(message: any, valueContext: any) {
 
     console.log("[v0] Chat resolved:", chat._id);
 
+    // Handle quoted/replied messages
+    const quotedMessage = message.context?.id ? await WhatsAppMessage.findOne({
+      whatsappMessageId: message.context.id
+    }) : null;
+
     const messageDoc = await WhatsAppMessage.create({
       chatId: chat._id,
-      patientId: chat.patientId,
+      patientId: chat.patientId || null,
       patientPhone: from,
       senderType: "patient",
-      messageType: type,
+      senderName: whatsappDisplayName || "Customer",
+      messageType: dbMessageType,
       body: messageBody,
       mediaUrl,
       mediaType,
       whatsappMessageId: messageId,
+      quotedMessageId: quotedMessage?._id || null,
+      quotedMessageBody: quotedMessage?.body || null,
+      quotedMediaUrl: quotedMessage?.mediaUrl || null,
+      quotedMediaType: quotedMessage?.mediaType || null,
       status: "delivered",
       createdAt: new Date(parseInt(timestamp) * 1000),
     });

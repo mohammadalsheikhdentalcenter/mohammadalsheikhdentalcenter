@@ -35,7 +35,7 @@ The WhatsApp Inbox is a custom-built messaging system for dental clinic staff (r
 ## Database Schema
 
 ### WhatsAppChat Collection
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   patientId: ObjectId (ref: Patient),
@@ -52,10 +52,10 @@ The WhatsApp Inbox is a custom-built messaging system for dental clinic staff (r
   createdAt: Date,
   updatedAt: Date
 }
-```
+\`\`\`
 
 ### WhatsAppMessage Collection
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   chatId: ObjectId (ref: WhatsAppChat),
@@ -78,10 +78,10 @@ The WhatsApp Inbox is a custom-built messaging system for dental clinic staff (r
   window24HourValid: Boolean, // Was sent within valid window
   createdAt: Date
 }
-```
+\`\`\`
 
 ### WhatsAppWebhookLog Collection
-```javascript
+\`\`\`javascript
 {
   _id: ObjectId,
   event: String,              // message_sent, message_delivered, etc.
@@ -92,7 +92,7 @@ The WhatsApp Inbox is a custom-built messaging system for dental clinic staff (r
   processedAt: Date,
   createdAt: Date
 }
-```
+\`\`\`
 
 ## API Routes
 
@@ -106,7 +106,7 @@ Fetch all chats with pagination and search
 - `limit`: Items per page (default: 20)
 
 **Response:**
-```json
+\`\`\`json
 {
   "success": true,
   "chats": [...],
@@ -115,26 +115,26 @@ Fetch all chats with pagination and search
   "limit": 20,
   "pages": 3
 }
-```
+\`\`\`
 
 ### POST `/api/whatsapp/chats`
 Create a new chat (typically called from webhook)
 
 **Body:**
-```json
+\`\`\`json
 {
   "patientId": "...",
   "patientPhone": "+923391415151",
   "patientName": "Ahmed Khan",
   "whatsappBusinessPhoneNumberId": "..."
 }
-```
+\`\`\`
 
 ### GET `/api/whatsapp/chats/[chatId]`
 Get specific chat details with message count and 24-hour window status
 
 **Response:**
-```json
+\`\`\`json
 {
   "success": true,
   "chat": {
@@ -147,17 +147,17 @@ Get specific chat details with message count and 24-hour window status
     "window24HourEndsAt": "2024-01-21T10:30:00Z"
   }
 }
-```
+\`\`\`
 
 ### PATCH `/api/whatsapp/chats/[chatId]`
 Update chat status
 
 **Body:**
-```json
+\`\`\`json
 {
   "status": "archived" | "closed" | "active"
 }
-```
+\`\`\`
 
 ### GET `/api/whatsapp/messages`
 Fetch messages for a chat with pagination
@@ -168,7 +168,7 @@ Fetch messages for a chat with pagination
 - `limit`: Items per page (default: 50)
 
 **Response:**
-```json
+\`\`\`json
 {
   "success": true,
   "messages": [...],
@@ -176,13 +176,13 @@ Fetch messages for a chat with pagination
   "page": 1,
   "limit": 50
 }
-```
+\`\`\`
 
 ### POST `/api/whatsapp/messages`
 Send a message to patient via WhatsApp Cloud API
 
 **Body:**
-```json
+\`\`\`json
 {
   "chatId": "...",
   "patientId": "...",
@@ -191,10 +191,10 @@ Send a message to patient via WhatsApp Cloud API
   "messageType": "text",
   "whatsappBusinessPhoneNumberId": "..."
 }
-```
+\`\`\`
 
 **Response:**
-```json
+\`\`\`json
 {
   "success": true,
   "message": {
@@ -205,7 +205,7 @@ Send a message to patient via WhatsApp Cloud API
     "createdAt": "2024-01-20T10:00:00Z"
   }
 }
-```
+\`\`\`
 
 ### GET `/api/whatsapp/webhook`
 Verify webhook endpoint (WhatsApp calls this during setup)
@@ -214,7 +214,7 @@ Verify webhook endpoint (WhatsApp calls this during setup)
 Receive incoming messages and status updates from WhatsApp
 
 **Webhook Format:**
-```json
+\`\`\`json
 {
   "object": "whatsapp_business_account",
   "entry": [
@@ -247,13 +247,13 @@ Receive incoming messages and status updates from WhatsApp
     }
   ]
 }
-```
+\`\`\`
 
 ## Environment Variables
 
 Required environment variables:
 
-```env
+\`\`\`env
 # WhatsApp Cloud API
 WHATSAPP_API_URL=https://graph.instagram.com/v18.0/{PHONE_NUMBER_ID}/messages
 WHATSAPP_ACCESS_TOKEN=your_access_token
@@ -264,7 +264,7 @@ MONGODB_URI=mongodb://...
 
 # JWT
 JWT_SECRET=your_secret_key
-```
+\`\`\`
 
 ## 24-Hour Window Logic
 
@@ -278,7 +278,7 @@ JWT_SECRET=your_secret_key
 
 ### Implementation
 
-```typescript
+\`\`\`typescript
 // When incoming message received
 const now = new Date();
 const window24HourEndsAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -290,7 +290,7 @@ await WhatsAppChat.findByIdAndUpdate(chatId, {
 // When checking if message can be sent as free text
 const isWithin24Hour = !chat.window24HourEndsAt || 
   new Date(chat.window24HourEndsAt) > new Date();
-```
+\`\`\`
 
 ## UI Pages
 

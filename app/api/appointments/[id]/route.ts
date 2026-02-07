@@ -143,22 +143,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    console.log("🟠 [PUT] Checking for medical report before closing appointment...")
+    console.log("🟠 [PUT] Closing appointment...")
 
     if (updateData.status === "closed" && originalAppointment.status !== "closed") {
-      const report = await AppointmentReport.findOne({
-        appointmentId: id,
-        patientId: originalAppointment.patientId,
-      })
-
-      if (!report) {
-        console.warn("🔴 [PUT] Cannot close appointment without medical report")
-        return NextResponse.json(
-          { error: "Cannot close appointment without a medical report. Please create a report first." },
-          { status: 400 },
-        )
-      }
-      console.log("🟢 [PUT] Medical report found, proceeding with closing appointment")
+      console.log("🟢 [PUT] Proceeding with closing appointment (report is optional)")
 
       // If there's an active referral, mark it as completed
       if (originalAppointment.currentReferralId) {

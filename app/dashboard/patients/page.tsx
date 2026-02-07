@@ -1,6 +1,5 @@
 //@ts-nocheck
 "use client"
-
 import type React from "react"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Sidebar } from "@/components/sidebar"
@@ -31,12 +30,148 @@ import { formatPhoneForDisplay, formatPhoneForDatabase } from "@/lib/validation"
 import PhoneInput from "react-phone-number-input"
 import "react-phone-number-input/style.css"
 import { PatientPhotoUpload } from "@/components/patient-photo-upload"
+import { useRouter } from "next/navigation"
 
 const formErrors = {
   assignedDoctorId: "Assigned Doctor is required",
 }
 
+// Patient Row Component
+const PatientRow = ({ 
+  patient, 
+  onView, 
+  onEdit, 
+  onDelete, 
+  loading, 
+  user 
+}: { 
+  patient: any
+  onView: (patient: any) => void
+  onEdit: (patient: any) => void
+  onDelete: (patient: any) => void
+  loading: any
+  user: any
+}) => {
+  const router = useRouter()
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    // Only make row clickable for doctors
+    if (user?.role !== "doctor") {
+      return
+    }
+    
+    // Don't navigate if clicking on buttons or interactive elements
+    if (
+      (e.target as HTMLElement).closest('button') ||
+      (e.target as HTMLElement).closest('a') ||
+      (e.target as HTMLElement).closest('input') ||
+      (e.target as HTMLElement).closest('select')
+    ) {
+      return
+    }
+    // Navigate to patient detail page with patient ID
+    router.push(`/dashboard/patients/${patient._id || patient.id}`)
+  }
+
+  return (
+    <tr 
+      className="border-b border-border hover:bg-muted/50 transition-colors"
+      style={{ 
+        cursor: user?.role === "doctor" ? "pointer" : "default" 
+      }}
+      onClick={handleRowClick}
+    >
+      <td className="px-4 sm:px-6 py-3">
+        {patient.photoUrl ? (
+          <img
+            src={patient.photoUrl || "/placeholder.svg"}
+            alt={patient.name}
+            className="w-10 h-10 rounded-full object-cover border border-border"
+          />
+        ) : (
+          <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground">
+            {patient.name?.charAt(0).toUpperCase()}
+          </div>
+        )}
+      </td>
+      <td className="px-4 sm:px-6 py-3 font-medium text-foreground">
+        <div>
+          <div className="sm:hidden text-xs text-muted-foreground mb-1">Name</div>
+          {patient.name}
+        </div>
+      </td>
+      <td className="px-4 sm:px-6 py-3 text-muted-foreground hidden sm:table-cell">
+        <div>
+          <div className="md:hidden text-xs text-muted-foreground mb-1">Phone</div>
+          {formatPhoneForDisplay(patient.phones?.find((p: any) => p.isPrimary)?.number)}
+        </div>
+      </td>
+      <td className="px-4 sm:px-6 py-3 text-muted-foreground hidden md:table-cell">
+        <div>
+          <div className="lg:hidden text-xs text-muted-foreground mb-1">Doctor</div>
+          {patient.assignedDoctorId?.name || "Unassigned"}
+        </div>
+      </td>
+      <td className="px-4 sm:px-6 py-3">
+        <div>
+          <div className="sm:hidden text-xs text-muted-foreground mb-1">Credentials</div>
+          {patient.credentialStatus === "incomplete" ? (
+            <span className="flex items-center gap-1 text-destructive text-xs font-medium">
+              <AlertCircle className="w-4 h-4" />
+              Incomplete
+            </span>
+          ) : (
+            <span className="text-accent text-xs font-medium">Complete</span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 sm:px-6 py-3">
+        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onView(patient)
+            }}
+            disabled={loading.deletePatient || loading.addPatient || loading.updatePatient}
+            className="text-primary hover:text-primary/80 disabled:text-primary/50 transition-colors cursor-pointer disabled:cursor-not-allowed p-1 hover:bg-primary/10 rounded"
+            title="View Details"
+          >
+            <Eye className="w-4 h-4" />
+          </button>
+          {user?.role !== "doctor" && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onEdit(patient)
+                }}
+                disabled={loading.deletePatient || loading.addPatient || loading.updatePatient}
+                className="text-accent hover:text-accent/80 disabled:text-accent/50 transition-colors cursor-pointer disabled:cursor-not-allowed p-1 hover:bg-accent/10 rounded"
+                title="Edit"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDelete(patient)
+                }}
+                disabled={loading.deletePatient || loading.addPatient || loading.updatePatient}
+                className="text-destructive hover:text-destructive/80 disabled:text-destructive/50 transition-colors cursor-pointer disabled:cursor-not-allowed p-1 hover:bg-destructive/10 rounded"
+                title="Delete"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
 export default function PatientsPage() {
+  const router = useRouter()
   const { user, token } = useAuth()
   const [patients, setPatients] = useState([])
   const [showForm, setShowForm] = useState(false)
@@ -55,6 +190,7 @@ export default function PatientsPage() {
     phones: [{ number: "", isPrimary: true }],
     email: "",
     dob: "",
+    nationality: "",
     idNumber: "",
     address: "",
     insuranceProvider: "",
@@ -414,12 +550,28 @@ export default function PatientsPage() {
       const method = editingPatient ? "PUT" : "POST"
       const url = editingPatient ? `/api/patients/${editingPatient}` : "/api/patients"
 
+      // Calculate age from DOB
+      const calculateAge = (dob: string): number => {
+        const birthDate = new Date(dob)
+        const today = new Date()
+        let age = today.getFullYear() - birthDate.getFullYear()
+        const monthDiff = today.getMonth() - birthDate.getMonth()
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--
+        }
+        
+        return Math.max(0, age)
+      }
+
       // Prepare the data for API
       const patientData = {
         name: formData.name.trim(),
         phones: validPhones,
         email: formData.email?.trim() || "",
         dob: formData.dob,
+        age: calculateAge(formData.dob),
+        nationality: formData.nationality?.trim() || "",
         idNumber: formData.idNumber?.trim() || "",
         address: formData.address?.trim() || "",
         insuranceProvider: formData.insuranceProvider?.trim() || "",
@@ -463,6 +615,7 @@ export default function PatientsPage() {
           phones: [{ number: "", isPrimary: true }],
           email: "",
           dob: "",
+          nationality: "",
           idNumber: "",
           address: "",
           insuranceProvider: "",
@@ -562,6 +715,7 @@ export default function PatientsPage() {
       phones: phones,
       email: patient.email || "",
       dob: patient.dob || "",
+      nationality: patient.nationality || "",
       idNumber: patient.idNumber || "",
       address: patient.address || "",
       insuranceProvider: patient.insuranceProvider || "",
@@ -731,6 +885,7 @@ export default function PatientsPage() {
                           phones: [{ number: "", isPrimary: true }],
                           email: "",
                           dob: "",
+                          nationality: "",
                           idNumber: "",
                           address: "",
                           insuranceProvider: "",
@@ -909,6 +1064,14 @@ export default function PatientsPage() {
                       onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
                       className="px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-text"
                       required
+                      disabled={loading.addPatient || loading.updatePatient}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Nationality (optional)"
+                      value={formData.nationality}
+                      onChange={(e) => setFormData({ ...formData, nationality: e.target.value })}
+                      className="px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-sm cursor-text"
                       disabled={loading.addPatient || loading.updatePatient}
                     />
                     <input
@@ -1102,95 +1265,26 @@ export default function PatientsPage() {
                       </tr>
                     ) : currentPatients.length > 0 ? (
                       currentPatients.map((patient) => (
-                        <tr key={patient._id} className="border-b border-border hover:bg-muted/50 transition-colors">
-                          <td className="px-4 sm:px-6 py-3">
-                            {patient.photoUrl ? (
-                              <img
-                                src={patient.photoUrl || "/placeholder.svg"}
-                                alt={patient.name}
-                                className="w-10 h-10 rounded-full object-cover border border-border"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center text-xs font-semibold text-muted-foreground">
-                                {patient.name?.charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 sm:px-6 py-3 font-medium text-foreground">
-                            <div>
-                              <div className="sm:hidden text-xs text-muted-foreground mb-1">Name</div>
-                              {patient.name}
-                            </div>
-                          </td>
-                          <td className="px-4 sm:px-6 py-3 text-muted-foreground hidden sm:table-cell">
-                            <div>
-                              <div className="md:hidden text-xs text-muted-foreground mb-1">Phone</div>
-                              {formatPhoneForDisplay(patient.phones?.find((p: any) => p.isPrimary)?.number)}
-                            </div>
-                          </td>
-                          <td className="px-4 sm:px-6 py-3 text-muted-foreground hidden md:table-cell">
-                            <div>
-                              <div className="lg:hidden text-xs text-muted-foreground mb-1">Doctor</div>
-                              {patient.assignedDoctorId?.name || "Unassigned"}
-                            </div>
-                          </td>
-                          <td className="px-4 sm:px-6 py-3">
-                            <div>
-                              <div className="sm:hidden text-xs text-muted-foreground mb-1">Credentials</div>
-                              {patient.credentialStatus === "incomplete" ? (
-                                <span className="flex items-center gap-1 text-destructive text-xs font-medium">
-                                  <AlertCircle className="w-4 h-4" />
-                                  Incomplete
-                                </span>
-                              ) : (
-                                <span className="text-accent text-xs font-medium">Complete</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 sm:px-6 py-3">
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedPatient(patient)
-                                  setMedicalFormData({
-                                    medicalHistory: patient.medicalHistory || "",
-                                    allergies: patient.allergies?.join(", ") || "",
-                                    medicalConditions: patient.medicalConditions?.join(", ") || "",
-                                  })
-                                  fetchMedicalHistory(patient._id)
-                                }}
-                                disabled={loading.deletePatient || loading.addPatient || loading.updatePatient}
-                                className="text-primary hover:text-primary/80 disabled:text-primary/50 transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                title="View Details"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                              {user?.role !== "doctor" && (
-                                <>
-                                  <button
-                                    onClick={() => handleEditPatient(patient)}
-                                    disabled={loading.deletePatient || loading.addPatient || loading.updatePatient}
-                                    className="text-accent hover:text-accent/80 disabled:text-accent/50 transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                    title="Edit"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setPatientToDelete(patient)
-                                      setShowDeleteModal(true)
-                                    }}
-                                    disabled={loading.deletePatient || loading.addPatient || loading.updatePatient}
-                                    className="text-destructive hover:text-destructive/80 disabled:text-destructive/50 transition-colors cursor-pointer disabled:cursor-not-allowed"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
+                        <PatientRow
+                          key={patient._id}
+                          patient={patient}
+                          onView={(patient) => {
+                            setSelectedPatient(patient)
+                            setMedicalFormData({
+                              medicalHistory: patient.medicalHistory || "",
+                              allergies: patient.allergies?.join(", ") || "",
+                              medicalConditions: patient.medicalConditions?.join(", ") || "",
+                            })
+                            fetchMedicalHistory(patient._id)
+                          }}
+                          onEdit={handleEditPatient}
+                          onDelete={(patient) => {
+                            setPatientToDelete(patient)
+                            setShowDeleteModal(true)
+                          }}
+                          loading={loading}
+                          user={user}
+                        />
                       ))
                     ) : (
                       <tr>
@@ -1305,7 +1399,7 @@ export default function PatientsPage() {
 
             {selectedPatient && (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-3 sm:p-4 z-50">
-                <div className="bg-card rounded-xl shadow-2xl border border-border p-4 sm:p-6 max-w-4xl w-full max-h-[95vh] overflow-y-auto mx-auto">
+                <div className="bg-card rounded-xl shadow-2xl border border-border p-4 sm:p-6 max-w-2xl w-full max-h-[95vh] overflow-y-auto mx-auto">
                   {/* Compact Header */}
                   <div className="flex items-start justify-between mb-4 sm:mb-6">
                     <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
@@ -1368,7 +1462,7 @@ export default function PatientsPage() {
                   </div>
 
                   {/* Compact Stats Bar */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
+                  {/* <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-4 sm:mb-6">
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400">
                         {medicalHistoryEntries.length}
@@ -1392,11 +1486,11 @@ export default function PatientsPage() {
 
                     <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400">
-                        {selectedPatient.insuranceProvider ? "���" : "✗"}
+                        {selectedPatient.insuranceProvider ? "✓" : "✗"}
                       </div>
                       <div className="text-xs text-amber-600/80 dark:text-amber-400/80 font-medium">Insurance</div>
                     </div>
-                  </div>
+                  </div> */}
 
                   {/* Single Column Layout */}
                   <div className="space-y-3 sm:space-y-4">
@@ -1440,6 +1534,18 @@ export default function PatientsPage() {
                           <p className="text-muted-foreground font-medium mb-1 text-xs sm:text-sm">Date of Birth</p>
                           <p className="text-foreground font-semibold text-sm sm:text-base">
                             {selectedPatient.dob || "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground font-medium mb-1 text-xs sm:text-sm">Age</p>
+                          <p className="text-foreground font-semibold text-sm sm:text-base">
+                            {selectedPatient.age ? `${selectedPatient.age} years` : "Not provided"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground font-medium mb-1 text-xs sm:text-sm">Nationality</p>
+                          <p className="text-foreground font-semibold text-sm sm:text-base">
+                            {selectedPatient.nationality || "Not provided"}
                           </p>
                         </div>
                         <div>

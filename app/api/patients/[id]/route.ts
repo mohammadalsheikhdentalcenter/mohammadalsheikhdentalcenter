@@ -9,6 +9,7 @@ import {
   MedicalHistory,
   AppointmentReport,
   Billing,
+  User, // Import User model
 } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 import { Types } from "mongoose"
@@ -174,6 +175,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     const updateDataToUse: any = { ...updateData }
     if (updateDataToUse.email === "") {
       updateDataToUse.email = null
+    }
+
+    // Handle age and nationality
+    if (updateDataToUse.age !== undefined) {
+      updateDataToUse.age = updateDataToUse.age ? parseInt(updateDataToUse.age) : null
+    }
+    if (updateDataToUse.nationality !== undefined) {
+      updateDataToUse.nationality = updateDataToUse.nationality?.trim() || ""
     }
 
     // Handle doctor assignment update

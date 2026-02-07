@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   Table,
+  MessageCircle
 } from "lucide-react"
 import { useState, useEffect } from "react"
 import Image from "next/image"
@@ -100,10 +101,11 @@ export function Sidebar() {
     if (user?.role === "admin") {
       return [
         ...baseItems,
+        { label: "Whatsapp", href: "/dashboard/inbox", icon: MessageCircle },
         { label: "Patients", href: "/dashboard/patients", icon: Users },
         { label: "Appointments", href: "/dashboard/appointments", icon: Calendar },
-        { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
-        { label: "Forwarded Requests", href: "/dashboard/forwarded-requests", icon: FileText },
+        // { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
+        { label: "Referral Requests", href: "/dashboard/forwarded-requests", icon: FileText },
         { label: "Medical Reports", href: "/dashboard/medical-reports", icon: FileText },
         { label: "Billing", href: "/dashboard/billing", icon: FileText },
         {
@@ -122,21 +124,22 @@ export function Sidebar() {
         ...baseItems,
         { label: "My Patients", href: "/dashboard/patients", icon: Users },
         { label: "My Appointments", href: "/dashboard/appointments", icon: Calendar },
-        { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
-        { label: "Patients Reports", href: "/dashboard/medical-reports", icon: FileText },
+        // { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
+        { label: "My Patients Reports", href: "/dashboard/medical-reports", icon: FileText },
         { label: "Request Status", href: "/dashboard/request-status", icon: FileText },
         { label: "Billing Requests", href: "/dashboard/billing-requests", icon: FileText },
-        { label: "Clinical Tools", href: "/dashboard/clinical-tools", icon: Stethoscope },
+        // { label: "Clinical Tools", href: "/dashboard/clinical-tools", icon: Stethoscope },
       ]
     }
 
     if (user?.role === "receptionist") {
       return [
         ...baseItems,
+        { label: "Whatsapp", href: "/dashboard/inbox", icon: MessageCircle },
         { label: "Patients", href: "/dashboard/patients", icon: Users },
         { label: "Appointments", href: "/dashboard/appointments", icon: Calendar },
-        { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
-        { label: "Forwarded Requests", href: "/dashboard/forwarded-requests", icon: FileText },
+        // { label: "Appointments Table", href: "/dashboard/appointments-table", icon: Table },
+        { label: "Referral Requests", href: "/dashboard/forwarded-requests", icon: FileText },
         { label: "Medical Reports", href: "/dashboard/medical-reports", icon: FileText },
         { label: "Billing", href: "/dashboard/billing", icon: FileText },
         {

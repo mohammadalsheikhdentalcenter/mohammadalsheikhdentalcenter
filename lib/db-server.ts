@@ -57,6 +57,8 @@ const patientSchema = new mongoose.Schema({
     default: null,
   },
   dob: { type: String, required: true },
+  age: { type: Number, default: null }, // Auto-calculated from DOB
+  nationality: { type: String, default: "", required: false }, // Optional nationality field
   idNumber: { type: String, default: "" },
   address: { type: String, default: "" },
   insuranceProvider: {
@@ -143,6 +145,21 @@ const toothChartSchema = new mongoose.Schema({
   patientId: { type: String, required: true },
   doctorId: { type: String, required: true },
   teeth: mongoose.Schema.Types.Mixed,
+  procedures: [
+    {
+      _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+      toothNumber: { type: Number, required: true },
+      sides: [String],
+      diagnosis: String,
+      procedure: String,
+      date: { type: Date, default: Date.now },
+      fillingType: String,
+      comments: String,
+      createdBy: String,
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date, default: Date.now },
+    },
+  ],
   overallNotes: String,
   lastReview: Date,
   createdAt: { type: Date, default: Date.now },
@@ -326,6 +343,8 @@ const patientReferralRequestSchema = new mongoose.Schema({
   ],
   patientEmail: { type: String, default: "" },
   patientDob: { type: String, required: true },
+  patientAge: { type: Number, default: null },
+  patientNationality: { type: String, default: "" },
   patientIdNumber: { type: String, default: "" },
   patientAddress: { type: String, default: "" },
   patientInsuranceProvider: { type: String, default: "" },
@@ -385,11 +404,13 @@ export const AppointmentReferral =
   mongoose.models.AppointmentReferral || mongoose.model("AppointmentReferral", appointmentReferralSchema)
 
 // WhatsApp Inbox Schemas
-// Stores conversations/chats with patients via WhatsApp
+// Stores conversations/chats with customers via WhatsApp (phone-based, not patient-dependent)
 const whatsAppChatSchema = new mongoose.Schema({
-  patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
-  patientPhone: { type: String, required: true }, // Primary phone for this chat
-  patientName: { type: String, required: true },
+  patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: false, default: null },
+  patientPhone: { type: String, required: true }, // Primary phone for this chat - unique identifier
+  patientName: { type: String, required: true }, // Customer name from WhatsApp or "Unknown"
+  whatsappProfilePictureUrl: { type: String, default: null }, // WhatsApp profile picture URL
+  whatsappDisplayName: { type: String, default: null }, // WhatsApp display name
   whatsappBusinessPhoneNumberId: { type: String, required: true }, // WhatsApp Business Phone ID
   lastMessage: { type: String, default: "" }, // Last message preview
   lastMessageAt: { type: Date, default: null }, // Timestamp of last message
@@ -402,24 +423,29 @@ const whatsAppChatSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 })
 
-whatsAppChatSchema.index({ patientId: 1, patientPhone: 1 }, { unique: true })
+whatsAppChatSchema.index({ patientPhone: 1 }, { unique: true })
 whatsAppChatSchema.index({ updatedAt: -1 })
 whatsAppChatSchema.index({ status: 1 })
 
 // Stores individual messages in WhatsApp conversations
 const whatsAppMessageSchema = new mongoose.Schema({
   chatId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppChat", required: true },
-  patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: true },
+  patientId: { type: mongoose.Schema.Types.ObjectId, ref: "Patient", required: false, default: null },
   patientPhone: { type: String, required: true },
   senderType: { type: String, enum: ["patient", "business"], required: true }, // Who sent it
   senderName: { type: String, default: "" }, // Name of sender for context
   messageType: { type: String, enum: ["text", "template", "media", "interactive"], default: "text" },
   body: { type: String, required: true }, // Message text content
-  mediaUrl: { type: String, default: null }, // URL for media messages
+  mediaUrl: { type: String, default: null }, // URL for media messages (from WhatsApp Cloud API)
   mediaType: { type: String, enum: ["image", "document", "audio", "video"], default: null },
+  mediaData: { type: Buffer, default: null }, // Binary media data stored locally
   templateName: { type: String, default: null }, // If template message, store template name
   templateParams: { type: [String], default: [] }, // Template parameters used
   whatsappMessageId: { type: String, default: null }, // WhatsApp's message ID
+  quotedMessageId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppMessage", default: null }, // For quoted/replied messages
+  quotedMessageBody: { type: String, default: null }, // Preview of quoted message
+  quotedMediaUrl: { type: String, default: null }, // Media URL of quoted message
+  quotedMediaType: { type: String, enum: ["image", "document", "audio", "video"], default: null }, // Media type of quoted message
   status: { type: String, enum: ["sent", "delivered", "read", "failed"], default: "sent" },
   statusChangedAt: { type: Date, default: Date.now },
   errorMessage: { type: String, default: null }, // Error details if failed

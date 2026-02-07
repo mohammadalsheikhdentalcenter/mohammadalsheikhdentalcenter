@@ -24,7 +24,7 @@ export function AppointmentActionModal({
   const isClose = action === "close"
   const title = isClose ? "Close Appointment" : "Cancel Appointment"
   const description = isClose
-    ? "Mark this appointment as completed. This action cannot be undone."
+    ? "Mark this appointment as completed. Creating a report is optional. You can close without creating a report if needed."
     : "Cancel this appointment. The patient will need to reschedule."
   const confirmText = isClose ? "Close" : "Cancel"
   const confirmColor = isClose

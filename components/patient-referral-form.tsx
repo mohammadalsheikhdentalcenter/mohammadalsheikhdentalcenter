@@ -66,6 +66,20 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
 
     setLoading(true)
     try {
+      // Calculate age from DOB
+      const calculateAge = (dob: string): number => {
+        const birthDate = new Date(dob)
+        const today = new Date()
+        let age = today.getFullYear() - birthDate.getFullYear()
+        const monthDiff = today.getMonth() - birthDate.getMonth()
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--
+        }
+        
+        return Math.max(0, age)
+      }
+
       const res = await fetch("/api/patient-referrals", {
         method: "POST",
         headers: {
@@ -77,6 +91,7 @@ export function PatientReferralForm({ isOpen, onClose, onSuccess, token }: Patie
           patientPhones: formData.phones.filter((p) => p.number.trim()),
           patientEmail: formData.patientEmail || "",
           patientDob: formData.patientDob,
+          patientAge: calculateAge(formData.patientDob),
           patientIdNumber: formData.patientIdNumber || "",
           patientAddress: formData.patientAddress || "",
           patientAllergies: formData.patientAllergies ? formData.patientAllergies.split(",").map((a) => a.trim()) : [],
