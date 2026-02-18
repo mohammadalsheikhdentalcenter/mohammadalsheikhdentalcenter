@@ -42,9 +42,24 @@ export function SearchableDropdown({
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Default filter function
+  // Default filter function - searches by full name and individual words (first/last name)
   const defaultFilterFn = (item: any, term: string) => {
-    return item.name.toLowerCase().includes(term.toLowerCase())
+    const searchTerm = term.toLowerCase().trim()
+    const itemName = item.name.toLowerCase()
+
+    // Search by full name
+    if (itemName.includes(searchTerm)) {
+      return true
+    }
+
+    // Search by individual words (first name, last name, etc.)
+    const nameWords = itemName.split(/\s+/)
+    const searchWords = searchTerm.split(/\s+/)
+
+    // Check if all search words match at least one name word
+    return searchWords.every(searchWord =>
+      nameWords.some(nameWord => nameWord.startsWith(searchWord))
+    )
   }
 
   const defaultRenderItem = (item: any) => {

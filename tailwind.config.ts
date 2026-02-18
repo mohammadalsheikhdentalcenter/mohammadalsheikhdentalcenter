@@ -10,6 +10,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      zIndex: {
+      200: '200',
+    },
       colors: {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',

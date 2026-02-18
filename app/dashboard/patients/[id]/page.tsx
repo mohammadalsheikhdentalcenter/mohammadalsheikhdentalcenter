@@ -91,12 +91,15 @@ export default function PatientDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [imageToDelete, setImageToDelete] = useState<any>(null);
   const [showMedicalDeleteModal, setShowMedicalDeleteModal] = useState(false);
-  const [medicalEntryToDelete, setMedicalEntryToDelete] = useState<number | null>(null);
+  const [medicalEntryToDelete, setMedicalEntryToDelete] = useState<
+    number | null
+  >(null);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [selectedImage, setSelectedImage] = useState<any>(null);
   const [showCreateReportModal, setShowCreateReportModal] = useState(false);
   const [patientAppointments, setPatientAppointments] = useState<any[]>([]);
-  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string>("");
+  const [selectedAppointmentId, setSelectedAppointmentId] =
+    useState<string>("");
   const [appointmentsLoading, setAppointmentsLoading] = useState(false);
   const [reportFormData, setReportFormData] = useState({
     procedures: [] as string[],
@@ -106,7 +109,9 @@ export default function PatientDetailPage() {
     nextVisitTime: "",
     followUpDetails: "",
   });
-  const [reportFormErrors, setReportFormErrors] = useState<Record<string, string>>({});
+  const [reportFormErrors, setReportFormErrors] = useState<
+    Record<string, string>
+  >({});
   const [reportLoading, setReportLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalToothNumber, setModalToothNumber] = useState<number | null>(null);
@@ -129,7 +134,8 @@ export default function PatientDetailPage() {
   // States for view report modal
   const [showViewReportModal, setShowViewReportModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<any>(null);
-  const [selectedReportAppointment, setSelectedReportAppointment] = useState<any>(null);
+  const [selectedReportAppointment, setSelectedReportAppointment] =
+    useState<any>(null);
   const [patientDetails, setPatientDetails] = useState<any>(null);
   const [fetchingPatient, setFetchingPatient] = useState(false);
   const [isAppointmentLoading, setIsAppointmentLoading] = useState(false);
@@ -211,10 +217,13 @@ export default function PatientDetailPage() {
               "Loaded chart with procedures:",
               chart.procedures?.length || 0,
             );
-            
+
             // Build teeth object from procedures
             const teethFromProcedures: Record<number, any> = {};
-            if (Array.isArray(chart.procedures) && chart.procedures.length > 0) {
+            if (
+              Array.isArray(chart.procedures) &&
+              chart.procedures.length > 0
+            ) {
               chart.procedures.forEach((proc: any) => {
                 const toothNum = proc.toothNumber;
                 if (toothNum) {
@@ -238,7 +247,10 @@ export default function PatientDetailPage() {
               },
             };
 
-            console.log("Teeth with procedures:", Object.keys(teethFromProcedures));
+            console.log(
+              "Teeth with procedures:",
+              Object.keys(teethFromProcedures),
+            );
             setToothChart(updatedChart);
             setToothProcedures(
               Array.isArray(chart.procedures) ? chart.procedures : [],
@@ -334,7 +346,8 @@ export default function PatientDetailPage() {
           );
         });
 
-        const doctorFilter = user?.role === "doctor" ? `&doctorId=${user.id}` : "";
+        const doctorFilter =
+          user?.role === "doctor" ? `&doctorId=${user.id}` : "";
         const reportsRes = await fetch(
           `/api/appointment-reports?patientId=${patientId}${doctorFilter}`,
           {
@@ -593,12 +606,14 @@ export default function PatientDetailPage() {
 
   const handleModalSave = async (data: {
     toothNumber: number;
+    toothNumbers?: number[];
     sides: string[];
     procedure: string;
     diagnosis: string;
     comments: string;
     date: string;
     fillingType?: string;
+    rootCanalType?: string;
   }) => {
     console.log("[v0] Modal save data received:", data);
     console.log("[v0] Editing procedure:", editingProcedure);
@@ -614,71 +629,118 @@ export default function PatientDetailPage() {
       return;
     }
 
-    const isEditing = !!editingProcedure?._id && !editingProcedure._id.startsWith("temp-");
+    const isEditing =
+      !!editingProcedure?._id && !editingProcedure._id.startsWith("temp-");
 
     try {
       setLoading((prev) => ({ ...prev, saveChart: true }));
 
-      const procedureData = {
-        toothNumber: data.toothNumber,
-        sides: data.sides,
-        procedure: data.procedure,
-        diagnosis: data.diagnosis,
-        comments: data.comments,
-        date: data.date,
-        fillingType: data.fillingType || "",
-      };
-
       if (isEditing) {
-        console.log("[v0] Updating existing procedure:", editingProcedure._id);
-        // Update existing procedure
+        console.log("[v0] Editing existing procedure(s)");
+
+        // For grouped procedures, delete all old procedures first
+        const procedureIdsToDelete = editingProcedure._ids || [
+          editingProcedure._id,
+        ];
+        console.log("[v0] Deleting old procedure(s):", procedureIdsToDelete);
+
+        for (const procId of procedureIdsToDelete) {
+          const deleteRes = await fetch(`/api/tooth-chart/${chartId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              procedureId: procId,
+              action: "deleteProcedure",
+            }),
+          });
+
+          if (!deleteRes.ok) {
+            const errorData = await deleteRes.json();
+            console.error("[v0] Failed to delete old procedure:", errorData);
+            toast.error("Failed to update procedure");
+            setLoading((prev) => ({ ...prev, saveChart: false }));
+            return;
+          }
+        }
+
+        console.log(
+          "[v0] Old procedure(s) deleted, now adding updated procedure(s)",
+        );
+      }
+
+      // Handle multiple teeth if selected (for both new and edited procedures)
+      const teethToUpdate = data.toothNumbers || [data.toothNumber];
+      console.log("[v0] Adding procedures for teeth:", teethToUpdate);
+
+      // Add new procedure for each tooth
+      for (let i = 0; i < teethToUpdate.length; i++) {
+        const toothNum = teethToUpdate[i];
+        const procedureDataForTooth = {
+          toothNumber: toothNum,
+          sides: data.sides,
+          procedure: data.procedure,
+          diagnosis: data.diagnosis,
+          comments: data.comments,
+          date: data.date,
+          fillingType: data.fillingType || "",
+          rootCanalType: data.rootCanalType || "",
+        };
+
+        console.log(
+          `[v0] Adding procedure for tooth #${toothNum} (${i + 1}/${teethToUpdate.length})`,
+        );
+        console.log(`[v0] Procedure data being sent:`, procedureDataForTooth);
+        const requestBody = {
+          procedure: procedureDataForTooth,
+          action: "addProcedure",
+        };
+        console.log(
+          `[v0] Request body JSON:`,
+          JSON.stringify(requestBody, null, 2),
+        );
         const res = await fetch(`/api/tooth-chart/${chartId}`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            procedureId: editingProcedure._id,
-            procedure: procedureData,
-            action: "updateProcedure",
-          }),
+          body: JSON.stringify(requestBody),
         });
 
         const responseData = await res.json();
         if (res.ok) {
-          console.log("[v0] Procedure updated successfully");
-          toast.success("Procedure updated successfully");
+          console.log(
+            `[v0] Procedure added successfully for tooth #${toothNum}`,
+          );
         } else {
-          console.error("[v0] Failed to update procedure:", responseData);
-          toast.error(responseData.error || "Failed to update procedure");
+          console.error(
+            `[v0] Failed to add procedure for tooth #${toothNum}:`,
+            responseData,
+          );
+          toast.error(
+            responseData.error ||
+              `Failed to add procedure for tooth ${toothNum}`,
+          );
           setLoading((prev) => ({ ...prev, saveChart: false }));
           return;
         }
-      } else {
-        console.log("[v0] Adding new procedure for tooth:", data.toothNumber);
-        // Add new procedure
-        const res = await fetch(`/api/tooth-chart/${chartId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            procedure: procedureData,
-            action: "addProcedure",
-          }),
-        });
+      }
 
-        const responseData = await res.json();
-        if (res.ok) {
-          console.log("[v0] Procedure added successfully");
-          toast.success("Procedure added successfully");
+      // Show success message
+      if (isEditing) {
+        if (teethToUpdate.length > 1) {
+          toast.success(`Procedure updated for ${teethToUpdate.length} teeth`);
         } else {
-          console.error("[v0] Failed to add procedure:", responseData);
-          toast.error(responseData.error || "Failed to add procedure");
-          setLoading((prev) => ({ ...prev, saveChart: false }));
-          return;
+          toast.success("Procedure updated successfully");
+        }
+      } else {
+        if (teethToUpdate.length > 1) {
+          toast.success(`Procedure added for ${teethToUpdate.length} teeth`);
+        } else {
+          toast.success("Procedure added successfully");
         }
       }
 
@@ -749,7 +811,8 @@ export default function PatientDetailPage() {
   const handleEditProcedure = (procedure: any) => {
     console.log("Editing procedure:", procedure);
     setEditingProcedure(procedure);
-    setModalToothNumber(procedure.toothNumber);
+    // Use first tooth number from array, or single toothNumber
+    setModalToothNumber(procedure.toothNumbers?.[0] || procedure.toothNumber);
     setIsModalOpen(true);
   };
 
@@ -797,11 +860,15 @@ export default function PatientDetailPage() {
             ...chart,
             teeth: {
               ...(chart.teeth || {}), // Start with existing teeth
-              ...teethFromProcedures,  // Override with procedure teeth
+              ...teethFromProcedures, // Override with procedure teeth
             },
           };
 
-          console.log("[v0] Updated teeth from procedures, total teeth with procedures:", Object.keys(teethFromProcedures).length);
+          console.log(
+            "[v0] Updated teeth from procedures, total teeth with procedures:",
+            Object.keys(teethFromProcedures).length,
+          );
+          console.log("[v0] Chart procedures from API:", chart.procedures);
           setToothChart(updatedChart);
           setToothProcedures(
             Array.isArray(chart.procedures) ? chart.procedures : [],
@@ -840,7 +907,6 @@ export default function PatientDetailPage() {
         body: JSON.stringify({
           teeth: toothChart.teeth,
           procedures: toothProcedures,
-          overallNotes: toothChart.overallNotes,
         }),
       });
 
@@ -1265,30 +1331,14 @@ export default function PatientDetailPage() {
                             onToothClick={handleToothClick}
                             readOnly={false}
                           />
-                          <div className="mt-4 sm:mt-6">
-                            <label className="block text-xs sm:text-sm font-semibold text-foreground mb-2">
-                              Overall Notes
-                            </label>
-                            <textarea
-                              value={toothChart.overallNotes || ""}
-                              onChange={(e) =>
-                                setToothChart({
-                                  ...toothChart,
-                                  overallNotes: e.target.value,
-                                })
-                              }
-                              disabled={loading.saveChart}
-                              className="w-full px-3 sm:px-4 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground placeholder-muted-foreground text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                              rows={4}
-                              placeholder="Add clinical notes..."
-                            />
-                          </div>
                           <ToothChartResultsTable
                             teeth={toothChart?.teeth || {}}
                             procedures={toothProcedures}
                             onEdit={handleEditProcedure}
                             onDelete={handleDeleteProcedure}
-                            onViewDetails={() => {}}
+                            {...(user?.role === "doctor" && {
+                              onViewDetails: () => {},
+                            })}
                           />
                         </>
                       )}
@@ -1695,8 +1745,9 @@ export default function PatientDetailPage() {
                                           <img
                                             src={
                                               image.imageUrl ||
+                                              "/placeholder.svg" ||
                                               "/placeholder.svg"
-                                             || "/placeholder.svg"}
+                                            }
                                             alt={image.title}
                                             className="w-12 h-12 object-cover rounded-lg"
                                           />

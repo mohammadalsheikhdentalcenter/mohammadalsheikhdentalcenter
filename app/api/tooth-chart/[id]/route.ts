@@ -47,19 +47,34 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     // Handle procedure-specific actions
     if (action === "addProcedure" && procedure) {
-      console.log("[v0] Adding new procedure")
-      if (!Array.isArray(chart.procedures)) {
-        chart.procedures = []
-      }
+      console.log("[v0] Adding new procedure for tooth:", procedure.toothNumber)
+      console.log("[v0] Procedure data received in API:", procedure)
+      const mongoose = await import("mongoose")
       const newProcedure = {
-        _id: new (await import("mongoose")).Types.ObjectId(),
+        _id: new mongoose.Types.ObjectId(),
         ...procedure,
         createdBy: payload.userId,
         createdAt: new Date(),
         updatedAt: new Date(),
       }
-      chart.procedures.push(newProcedure)
-      console.log("[v0] Procedure added. Total procedures:", chart.procedures.length)
+      console.log("[v0] New procedure object to be saved:", newProcedure)
+
+      // Use atomic $push operation to avoid race conditions
+      const updatedChart = await ToothChart.findByIdAndUpdate(
+        params.id,
+        {
+          $push: { procedures: newProcedure },
+          $set: { lastReview: new Date(), doctorId: payload.userId }
+        },
+        { new: true, runValidators: true }
+      )
+
+      if (!updatedChart) {
+        return NextResponse.json({ error: "Failed to update chart" }, { status: 500 })
+      }
+
+      console.log("[v0] Procedure added. Total procedures:", updatedChart.procedures?.length || 0)
+      return NextResponse.json({ success: true, chart: updatedChart })
     } else if (action === "updateProcedure" && procedureId && procedure) {
       console.log("[v0] Updating procedure:", procedureId)
       if (Array.isArray(chart.procedures)) {
@@ -93,7 +108,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           return NextResponse.json({ error: "Procedure not found" }, { status: 404 })
         }
       }
-    } else if (body.teeth || body.procedures || body.overallNotes) {
+    } else if (body.teeth || body.procedures) {
       // Handle bulk updates (legacy support)
       console.log("[v0] Handling bulk update")
       if (body.procedures && Array.isArray(body.procedures)) {
@@ -101,9 +116,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       }
       if (body.teeth) {
         chart.teeth = body.teeth
-      }
-      if (body.overallNotes !== undefined) {
-        chart.overallNotes = body.overallNotes
       }
     }
 
