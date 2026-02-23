@@ -15,7 +15,56 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const chart = await ToothChart.findById(params.id)
     if (!chart) return NextResponse.json({ error: "Tooth chart not found" }, { status: 404 })
 
-    return NextResponse.json({ success: true, chart })
+    // Enrich chart data with patient and doctor names
+    const chartObj = chart.toObject ? chart.toObject() : chart
+
+    // Get patient name if not already set
+    if (!chartObj.patientName && chartObj.patientId) {
+      const { Patient } = await import("@/lib/db-server")
+      const patient = await Patient.findById(chartObj.patientId)
+      if (patient) {
+        chartObj.patientName = patient.name || patient.email
+      }
+    }
+
+    // Get doctor name if not already set
+    if (!chartObj.doctorName && chartObj.doctorId) {
+      const { User } = await import("@/lib/db-server")
+      const doctor = await User.findById(chartObj.doctorId)
+      if (doctor) {
+        chartObj.doctorName = doctor.name || doctor.email
+      }
+    }
+
+    // Enrich procedures with doctor names
+    if (chartObj.procedures && Array.isArray(chartObj.procedures)) {
+      chartObj.procedures = await Promise.all(chartObj.procedures.map(async (proc) => {
+        if (proc.createdBy && !proc.createdByName) {
+          const { User } = await import("@/lib/db-server")
+          const doctor = await User.findById(proc.createdBy)
+          if (doctor) {
+            proc.createdByName = doctor.name || doctor.email
+          }
+        }
+        return proc
+      }))
+    }
+
+    // Enrich general procedures with doctor names
+    if (chartObj.generalProcedures && Array.isArray(chartObj.generalProcedures)) {
+      chartObj.generalProcedures = await Promise.all(chartObj.generalProcedures.map(async (proc) => {
+        if (proc.createdBy && !proc.createdByName) {
+          const { User } = await import("@/lib/db-server")
+          const doctor = await User.findById(proc.createdBy)
+          if (doctor) {
+            proc.createdByName = doctor.name || doctor.email
+          }
+        }
+        return proc
+      }))
+    }
+
+    return NextResponse.json({ success: true, chart: chartObj })
   } catch (error) {
     console.error(error)
     return NextResponse.json({ error: "Failed to fetch tooth chart" }, { status: 500 })
@@ -50,10 +99,22 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       console.log("[v0] Adding new procedure for tooth:", procedure.toothNumber)
       console.log("[v0] Procedure data received in API:", procedure)
       const mongoose = await import("mongoose")
+      
+      // Get doctor name for display
+      const { User, Patient } = await import("@/lib/db-server")
+      const doctor = await User.findById(payload.userId)
+      const doctorName = doctor?.name || doctor?.email || payload.name
+      
+      // Get patient name for display
+      const patient = await Patient.findById(chart.patientId)
+      const patientName = patient?.name || patient?.email || "Unknown"
+      
       const newProcedure = {
         _id: new mongoose.Types.ObjectId(),
         ...procedure,
         createdBy: payload.userId,
+        createdByName: doctorName, // Store doctor name for easier access
+        patientName: patientName, // Store patient name for easier access
         createdAt: new Date(),
         updatedAt: new Date(),
       }
@@ -64,7 +125,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         params.id,
         {
           $push: { procedures: newProcedure },
-          $set: { lastReview: new Date(), doctorId: payload.userId }
+          $set: { 
+            lastReview: new Date(), 
+            doctorId: payload.userId,
+            doctorName: doctorName,
+          }
         },
         { new: true, runValidators: true }
       )
@@ -108,6 +173,58 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           return NextResponse.json({ error: "Procedure not found" }, { status: 404 })
         }
       }
+    } else if (action === "addGeneralProcedure" && body.generalProcedure) {
+      // Handle general procedures (apply to whole mouth)
+      console.log("[v0] Adding general procedure:", body.generalProcedure.name)
+      const mongoose = await import("mongoose")
+      const { User } = await import("@/lib/db-server")
+      const doctor = await User.findById(payload.userId)
+      const doctorName = doctor?.name || doctor?.email || payload.name
+
+      const newGeneralProcedure = {
+        _id: new mongoose.Types.ObjectId(),
+        name: body.generalProcedure.name,
+        date: body.generalProcedure.date || new Date(),
+        notes: body.generalProcedure.notes,
+        createdBy: payload.userId,
+        createdByName: doctorName,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+
+      const updatedChart = await ToothChart.findByIdAndUpdate(
+        params.id,
+        {
+          $push: { generalProcedures: newGeneralProcedure },
+          $set: { lastReview: new Date(), doctorId: payload.userId, doctorName: doctorName }
+        },
+        { new: true, runValidators: true }
+      )
+
+      if (!updatedChart) {
+        return NextResponse.json({ error: "Failed to update chart" }, { status: 500 })
+      }
+
+      console.log("[v0] General procedure added. Total:", updatedChart.generalProcedures?.length || 0)
+      return NextResponse.json({ success: true, chart: updatedChart })
+    } else if (action === "deleteGeneralProcedure" && body.procedureId) {
+      // Delete general procedure
+      console.log("[v0] Deleting general procedure:", body.procedureId)
+      
+      const updatedChart = await ToothChart.findByIdAndUpdate(
+        params.id,
+        {
+          $pull: { generalProcedures: { _id: body.procedureId } }
+        },
+        { new: true, runValidators: true }
+      )
+
+      if (!updatedChart) {
+        return NextResponse.json({ error: "Failed to update chart" }, { status: 500 })
+      }
+
+      console.log("[v0] General procedure deleted")
+      return NextResponse.json({ success: true, chart: updatedChart })
     } else if (body.teeth || body.procedures) {
       // Handle bulk updates (legacy support)
       console.log("[v0] Handling bulk update")

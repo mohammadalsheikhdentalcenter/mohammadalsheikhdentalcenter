@@ -47,14 +47,66 @@ export async function GET(request: NextRequest) {
       patientId: queryPatientId.toString(),
     }).sort({ createdAt: -1 })
 
+    // Populate patient and doctor names for all charts
+    const enrichedCharts = await Promise.all(charts.map(async (chart) => {
+      const chartObj = chart.toObject ? chart.toObject() : chart
+      
+      // Get patient name if not already set
+      if (!chartObj.patientName && chartObj.patientId) {
+        const patient = await Patient.findById(chartObj.patientId)
+        if (patient) {
+          chartObj.patientName = patient.name || patient.email
+        }
+      }
+
+      // Get doctor name if not already set
+      if (!chartObj.doctorName && chartObj.doctorId) {
+        const User = await import("@/lib/db-server").then(m => m.User)
+        const doctor = await User.findById(chartObj.doctorId)
+        if (doctor) {
+          chartObj.doctorName = doctor.name || doctor.email
+        }
+      }
+
+      // Enrich procedures with doctor names
+      if (chartObj.procedures && Array.isArray(chartObj.procedures)) {
+        chartObj.procedures = await Promise.all(chartObj.procedures.map(async (proc) => {
+          if (proc.createdBy && !proc.createdByName) {
+            const User = await import("@/lib/db-server").then(m => m.User)
+            const doctor = await User.findById(proc.createdBy)
+            if (doctor) {
+              proc.createdByName = doctor.name || doctor.email
+            }
+          }
+          return proc
+        }))
+      }
+
+      // Enrich general procedures with doctor names
+      if (chartObj.generalProcedures && Array.isArray(chartObj.generalProcedures)) {
+        chartObj.generalProcedures = await Promise.all(chartObj.generalProcedures.map(async (proc) => {
+          if (proc.createdBy && !proc.createdByName) {
+            const User = await import("@/lib/db-server").then(m => m.User)
+            const doctor = await User.findById(proc.createdBy)
+            if (doctor) {
+              proc.createdByName = doctor.name || doctor.email
+            }
+          }
+          return proc
+        }))
+      }
+
+      return chartObj
+    }))
+
     console.log("  Tooth chart query result:", {
       patientId: queryPatientId,
-      found: charts.length > 0,
+      found: enrichedCharts.length > 0,
     })
     return NextResponse.json({
       success: true,
-      toothChart: charts[0] || null,
-      chartHistory: charts,
+      toothChart: enrichedCharts[0] || null,
+      chartHistory: enrichedCharts,
     })
   } catch (error) {
     console.error("  Tooth chart API error:", error)
@@ -111,11 +163,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Patient not found" }, { status: 404 })
     }
 
+    // Get doctor/user name
+    const { User } = await import("@/lib/db-server")
+    const doctor = await User.findById(payload.userId)
+    const doctorName = doctor?.name || doctor?.email || payload.name
+
     const newChart = await ToothChart.create({
       patientId: patientId.toString(),
+      patientName: patient.name || patient.email,
       doctorId: payload.userId,
+      doctorName: doctorName,
       teeth: teeth || {},
       procedures: procedures || [],
+      generalProcedures: [],
       lastReview: new Date(),
       createdAt: new Date(),
     })

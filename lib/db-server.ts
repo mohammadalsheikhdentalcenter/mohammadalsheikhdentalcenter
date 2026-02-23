@@ -143,7 +143,9 @@ const appointmentSchema = new mongoose.Schema({
 
 const toothChartSchema = new mongoose.Schema({
   patientId: { type: String, required: true },
+  patientName: { type: String, default: null }, // Store patient name for display
   doctorId: { type: String, required: true },
+  doctorName: { type: String, default: null }, // Store doctor name for display
   teeth: mongoose.Schema.Types.Mixed,
   procedures: [
     {
@@ -157,6 +159,21 @@ const toothChartSchema = new mongoose.Schema({
       rootCanalType: String,
       comments: String,
       createdBy: String,
+      createdByName: String, // Store doctor name for easier display
+      createdAt: { type: Date, default: Date.now },
+      updatedAt: { type: Date, default: Date.now },
+    },
+  ],
+  generalProcedures: [
+    {
+      _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
+      name: String, // e.g., "Night Guard", "Teeth Whitening", "Scaling"
+      date: { type: Date, default: Date.now },
+      createdBy: String,
+      createdByName: String, // Doctor who added this procedure
+      patientName: String, // Patient name for display
+      comments: String, // Comments about the procedure
+      notes: String, // Legacy field for backward compatibility
       createdAt: { type: Date, default: Date.now },
       updatedAt: { type: Date, default: Date.now },
     },

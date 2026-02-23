@@ -2,6 +2,9 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { ChevronDown } from "lucide-react";
+import { toast } from "react-hot-toast";
+import { GeneralProcedureModal } from "./general-procedure-modal";
 
 interface ToothStatus {
   status: string;
@@ -9,6 +12,16 @@ interface ToothStatus {
   procedure?: string;
   fillingType?: string;
   notes?: string;
+}
+
+interface GeneralProcedure {
+  _id?: string;
+  id?: string;
+  name: string;
+  date?: string;
+  comments?: string;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 interface ToothChartProps {
@@ -20,7 +33,23 @@ interface ToothChartProps {
   onToothProcedureChange?: (toothNumber: number, procedure: string) => void;
   onToothFillingTypeChange?: (toothNumber: number, fillingType: string) => void;
   onToothNotesChange?: (toothNumber: number, notes: string) => void;
+  generalProcedures?: GeneralProcedure[];
+  toothChart?: any;
+  patientId?: string;
+  token?: string;
+  onGeneralProcedureAdd?: (procedure: GeneralProcedure) => void;
+  onGeneralProcedureRemove?: (procedureId: string) => void;
 }
+
+const GENERAL_PROCEDURES = [
+  "Night Guard",
+  "Teeth Whitening",
+  "Home Bleach",
+  "Scaling",
+  "Professional Cleaning",
+  "Fluoride Treatment",
+  "Dental Sealant",
+];
 
 export function ToothChartVisual({
   teeth,
@@ -31,23 +60,54 @@ export function ToothChartVisual({
   onToothProcedureChange,
   onToothFillingTypeChange,
   onToothNotesChange,
+  generalProcedures = [],
+  toothChart,
+  patientId,
+  token,
+  onGeneralProcedureAdd,
+  onGeneralProcedureRemove,
 }: ToothChartProps) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [showTooltip, setShowTooltip] = useState<number | null>(null);
+  const [showGeneralProcedures, setShowGeneralProcedures] = useState(false);
+  const [showGeneralProcedureModal, setShowGeneralProcedureModal] =
+    useState(false);
+  const [selectedGeneralProcedure, setSelectedGeneralProcedure] = useState<
+    string | null
+  >(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Check if mobile on mount and window resize
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
+    window.addEventListener("resize", checkMobile);
+
+    return () => window.removeEventListener("resize", checkMobile);
   }, []);
+
+  // Close general procedures dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setShowGeneralProcedures(false);
+      }
+    };
+
+    if (showGeneralProcedures) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showGeneralProcedures]);
 
   // Center the scroll position on mount for mobile
   useEffect(() => {
@@ -63,12 +123,12 @@ export function ToothChartVisual({
   const handleToothTouch = (toothNum: number, e: React.TouchEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     if (readOnly) return;
-    
+
     // Toggle tooltip on touch
-    setShowTooltip(prev => prev === toothNum ? null : toothNum);
-    
+    setShowTooltip((prev) => (prev === toothNum ? null : toothNum));
+
     // Also trigger the click
     setSelectedTooth(toothNum);
     onToothClick(toothNum);
@@ -81,18 +141,47 @@ export function ToothChartVisual({
     };
 
     if (isMobile) {
-      document.addEventListener('touchstart', handleTouchOutside);
-      return () => document.removeEventListener('touchstart', handleTouchOutside);
+      document.addEventListener("touchstart", handleTouchOutside);
+      return () =>
+        document.removeEventListener("touchstart", handleTouchOutside);
     }
   }, [isMobile]);
 
   // Image mapping
   const getToothImageNumber = (toothNumber: number): number => {
     const toothImageMap: Record<number, number> = {
-      18: 1, 17: 2, 16: 3, 15: 4, 14: 5, 13: 6, 12: 7, 11: 8,
-      21: 9, 22: 10, 23: 11, 24: 12, 25: 13, 26: 14, 27: 15, 28: 16,
-      38: 17, 37: 18, 36: 19, 35: 20, 34: 21, 33: 22, 32: 23, 31: 24,
-      41: 25, 42: 26, 43: 27, 44: 28, 45: 29, 46: 30, 47: 31, 48: 32,
+      18: 1,
+      17: 2,
+      16: 3,
+      15: 4,
+      14: 5,
+      13: 6,
+      12: 7,
+      11: 8,
+      21: 9,
+      22: 10,
+      23: 11,
+      24: 12,
+      25: 13,
+      26: 14,
+      27: 15,
+      28: 16,
+      38: 17,
+      37: 18,
+      36: 19,
+      35: 20,
+      34: 21,
+      33: 22,
+      32: 23,
+      31: 24,
+      41: 25,
+      42: 26,
+      43: 27,
+      44: 28,
+      45: 29,
+      46: 30,
+      47: 31,
+      48: 32,
     };
     return toothImageMap[toothNumber] || toothNumber;
   };
@@ -166,7 +255,9 @@ export function ToothChartVisual({
       <div className="relative w-full h-full flex items-center justify-center bg-white rounded-lg overflow-hidden">
         {status === "missing" ? (
           <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-400 bg-gray-100">
-            <div className="text-gray-600 text-sm sm:text-base md:text-lg font-bold">✕</div>
+            <div className="text-gray-600 text-sm sm:text-base md:text-lg font-bold">
+              ✕
+            </div>
           </div>
         ) : imageError ? (
           <div className="w-full h-full flex items-center justify-center bg-gray-100">
@@ -181,6 +272,7 @@ export function ToothChartVisual({
             className="w-full h-full object-contain p-0.5"
             onError={() => setImageError(true)}
             loading="lazy"
+            crossOrigin="anonymous"
           />
         )}
       </div>
@@ -259,7 +351,9 @@ export function ToothChartVisual({
                   {isMissing ? (
                     <span className="font-medium text-amber-600">Missing</span>
                   ) : isTreated ? (
-                    <span className="font-medium text-indigo-600">Procedure Done</span>
+                    <span className="font-medium text-indigo-600">
+                      Procedure Done
+                    </span>
                   ) : (
                     <span className="font-medium text-green-600">Healthy</span>
                   )}
@@ -336,17 +430,39 @@ export function ToothChartVisual({
   return (
     <div className="space-y-2 sm:space-y-3 md:space-y-4">
       {/* Dental Chart */}
-      <div className={`bg-gray-50 border border-gray-300 rounded-lg ${getContainerPadding()}`}>
+      <div
+        className={`bg-gray-50 border border-gray-300 rounded-lg ${getContainerPadding()}`}
+      >
         {/* Mobile Scroll Indicators - Only visible on mobile */}
         {isMobile && (
           <div className="flex justify-center mb-2">
             <div className="flex items-center gap-1 text-xs text-gray-500">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                />
               </svg>
               <span>Scroll to see all teeth</span>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M14 5l7 7m0 0l-7 7m7-7H3"
+                />
               </svg>
             </div>
           </div>
@@ -354,25 +470,30 @@ export function ToothChartVisual({
 
         <div className="flex items-center gap-1 sm:gap-2">
           {/* R Label - Sticky only on mobile */}
-          <div className={`flex-shrink-0 ${getLabelSize()} flex items-center justify-center
-            ${isMobile ? 'sticky left-0 z-10 bg-gray-50' : ''}`}
+          <div
+            className={`flex-shrink-0 ${getLabelSize()} flex items-center justify-center
+            ${isMobile ? "sticky left-0 z-10 bg-gray-50" : ""}`}
           >
             <span className="font-bold text-red-600">R</span>
           </div>
 
           {/* Teeth Container - Scroll only on mobile */}
-          <div 
+          <div
             ref={scrollContainerRef}
-            className={`flex-1 min-w-0 ${isMobile ? 'overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent [-webkit-overflow-scrolling:touch]' : 'overflow-visible'}`}
+            className={`flex-1 min-w-0 ${isMobile ? "overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent [-webkit-overflow-scrolling:touch]" : "overflow-visible"}`}
             style={{
-              scrollbarWidth: isMobile ? 'thin' : 'auto',
-              msOverflowStyle: isMobile ? 'auto' : 'hidden',
+              scrollbarWidth: isMobile ? "thin" : "auto",
+              msOverflowStyle: isMobile ? "auto" : "hidden",
             }}
           >
-            <div className={`${isMobile ? 'inline-block min-w-full' : 'w-full'}`}>
+            <div
+              className={`${isMobile ? "inline-block min-w-full" : "w-full"}`}
+            >
               <div className="space-y-0">
                 {/* Upper Teeth Row */}
-                <div className={`flex items-center ${isMobile ? 'justify-start' : 'justify-center'}`}>
+                <div
+                  className={`flex items-center ${isMobile ? "justify-start" : "justify-center"}`}
+                >
                   <div className={`flex ${getToothGap()}`}>
                     {upperTeeth
                       .slice(0, 8)
@@ -380,7 +501,9 @@ export function ToothChartVisual({
                   </div>
 
                   {/* Center red separator */}
-                  <div className={`w-0.5 ${getSeparatorHeight()} bg-red-500 mx-0.5 sm:mx-1 flex-shrink-0`} />
+                  <div
+                    className={`w-0.5 ${getSeparatorHeight()} bg-red-500 mx-0.5 sm:mx-1 flex-shrink-0`}
+                  />
 
                   <div className={`flex ${getToothGap()}`}>
                     {upperTeeth
@@ -393,14 +516,18 @@ export function ToothChartVisual({
                 <div className="h-0.5 bg-red-500 my-0.5 sm:my-1" />
 
                 {/* Lower Teeth Row */}
-                <div className={`flex items-center ${isMobile ? 'justify-start' : 'justify-center'}`}>
+                <div
+                  className={`flex items-center ${isMobile ? "justify-start" : "justify-center"}`}
+                >
                   <div className={`flex ${getToothGap()}`}>
                     {lowerTeeth
                       .slice(0, 8)
                       .map((toothNum) => renderToothBox(toothNum, false))}
                   </div>
 
-                  <div className={`w-0.5 ${getSeparatorHeight()} bg-red-500 mx-0.5 sm:mx-1 flex-shrink-0`} />
+                  <div
+                    className={`w-0.5 ${getSeparatorHeight()} bg-red-500 mx-0.5 sm:mx-1 flex-shrink-0`}
+                  />
 
                   <div className={`flex ${getToothGap()}`}>
                     {lowerTeeth
@@ -413,8 +540,9 @@ export function ToothChartVisual({
           </div>
 
           {/* L Label - Sticky only on mobile */}
-          <div className={`flex-shrink-0 ${getLabelSize()} flex items-center justify-center
-            ${isMobile ? 'sticky right-0 z-10 bg-gray-50' : ''}`}
+          <div
+            className={`flex-shrink-0 ${getLabelSize()} flex items-center justify-center
+            ${isMobile ? "sticky right-0 z-10 bg-gray-50" : ""}`}
           >
             <span className="font-bold text-red-600">L</span>
           </div>
@@ -432,7 +560,6 @@ export function ToothChartVisual({
             <div className="w-3 h-3 bg-[#d1d5db] rounded-full"></div>
             <span>Healthy</span>
           </div>
-          
         </div>
       )}
 
@@ -447,9 +574,150 @@ export function ToothChartVisual({
             <div className="w-3 h-3 bg-[#d1d5db] rounded-full"></div>
             <span>Healthy</span>
           </div>
-         
         </div>
       )}
+
+      {/* General Procedures Section */}
+      <div className="space-y-2 sm:space-y-3">
+        <h3 className="font-semibold text-foreground text-sm sm:text-base">
+          General Procedures
+        </h3>
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setShowGeneralProcedures(!showGeneralProcedures)}
+            disabled={readOnly}
+            className={`w-full px-3 py-2 sm:px-4 sm:py-2.5 border border-gray-300 rounded-lg bg-white text-left flex items-center justify-between ${
+              readOnly
+                ? "cursor-default opacity-50"
+                : "hover:border-gray-400 cursor-pointer"
+            } transition-colors`}
+          >
+            <span className="text-sm text-gray-700">
+              {generalProcedures.length > 0
+                ? `${generalProcedures.length} procedure(s) added`
+                : "Select general procedures..."}
+            </span>
+            <ChevronDown
+              size={18}
+              className={`text-gray-600 transition-transform ${
+                showGeneralProcedures ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {/* Dropdown Menu */}
+          {showGeneralProcedures && !readOnly && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-56 overflow-y-auto">
+              {GENERAL_PROCEDURES.map((proc) => (
+                <label
+                  key={proc}
+                  className="flex items-center px-3 py-2 sm:px-4 sm:py-2.5 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                >
+                  <input
+                    type="checkbox"
+                    checked={generalProcedures.includes(proc)}
+                    onChange={() => {
+                      if (generalProcedures.includes(proc)) {
+                        onGeneralProcedureRemove?.(proc);
+                      } else {
+                        // Open modal for new procedure
+                        setSelectedGeneralProcedure(proc);
+                        setShowGeneralProcedureModal(true);
+                      }
+                      // Close dropdown after selection
+                      setShowGeneralProcedures(false);
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">{proc}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* General Procedure Modal */}
+      <GeneralProcedureModal
+        isOpen={showGeneralProcedureModal}
+        selectedProcedure={selectedGeneralProcedure}
+        onClose={() => {
+          setShowGeneralProcedureModal(false);
+          setSelectedGeneralProcedure(null);
+        }}
+        onSave={async (data) => {
+          try {
+            console.log("[DEBUG VISUAL] onSave called in ToothChartVisual");
+            console.log("[DEBUG VISUAL] data:", data);
+
+            if (!patientId || !token) {
+              console.log("[DEBUG VISUAL] Missing patientId or token");
+              toast.error("Missing patient information");
+              return;
+            }
+
+            if (!toothChart?._id && !toothChart?.id) {
+              console.log("[DEBUG VISUAL] Missing tooth chart");
+              toast.error(
+                "Missing tooth chart. Please create a tooth chart first.",
+              );
+              return;
+            }
+
+            const chartId = toothChart._id || toothChart.id;
+            console.log("[DEBUG VISUAL] chartId:", chartId);
+
+            // Call dedicated general procedures API
+            const res = await fetch("/api/general-procedures", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                chartId: chartId,
+                patientId: patientId,
+                name: data.name,
+                date: data.date,
+                comments: data.comments || "",
+              }),
+            });
+
+            console.log("[DEBUG VISUAL] Response status:", res.status);
+
+            if (res.ok) {
+              const responseData = await res.json();
+              console.log("[DEBUG VISUAL] Response data:", responseData);
+              toast.success(
+                `General procedure "${data.name}" saved successfully`,
+              );
+
+              // Add procedure to local list with full object
+              if (responseData.procedure) {
+                onGeneralProcedureAdd?.(responseData.procedure);
+              }
+
+              // Close modal
+              setShowGeneralProcedureModal(false);
+              setSelectedGeneralProcedure(null);
+
+              // Reload the page to refresh all data
+              console.log("[DEBUG VISUAL] Reloading page to refresh data");
+              window.location.reload();
+            } else {
+              const error = await res.json();
+              console.log("[DEBUG VISUAL] Error response:", error);
+              toast.error(error.error || "Failed to save general procedure");
+            }
+          } catch (error) {
+            console.error(
+              "[DEBUG VISUAL] Error saving general procedure:",
+              error,
+            );
+            toast.error("Error saving general procedure");
+          }
+        }}
+      />
     </div>
   );
 }

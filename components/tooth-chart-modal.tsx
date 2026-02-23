@@ -15,14 +15,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-const TOOTH_SIDES = ["Distal", "Mesial", "Occlusal", "Incisal", "Cervical"];
+// Correct dental surface terminology
+const TOOTH_SIDES = [
+  "Distal",
+  "Occlusal",
+  "Mesial",
+  "Buccal",
+  "Cervical",
+  "Lingual",
+];
+
+// Map Incisal as alternative for Occlusal for anterior teeth
+const INCISAL_ALTERNATIVE = "Incisal (for anterior teeth)";
 const COMMON_PROCEDURES = [
   "Filling",
   "Root Canal",
   "Crown",
   "Extraction",
-  "Cleaning",
-  "Whitening",
   "Bridge",
   "Implant",
 ];
@@ -352,7 +361,7 @@ export function ToothChartModal({
           {/* Tooth Sides */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Select Tooth Sides</Label>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
               {TOOTH_SIDES.map((side) => (
                 <button
                   key={side}

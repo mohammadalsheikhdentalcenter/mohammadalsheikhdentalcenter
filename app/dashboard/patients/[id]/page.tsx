@@ -42,6 +42,7 @@ import {
 import { ToothChartVisual } from "@/components/tooth-chart-visual";
 import { ToothChartModal } from "@/components/tooth-chart-modal";
 import { ConfirmDeleteModal } from "@/components/confirm-delete-modal";
+import { GeneralProcedureModal } from "@/components/general-procedure-modal";
 import { XrayFileUpload } from "@/components/xray-file-upload";
 import { XrayDisplayViewer } from "@/components/xray-display-viewer";
 import { MedicalHistorySection } from "@/components/medical-history-section";
@@ -117,6 +118,12 @@ export default function PatientDetailPage() {
   const [modalToothNumber, setModalToothNumber] = useState<number | null>(null);
   const [toothProcedures, setToothProcedures] = useState<any[]>([]);
   const [editingProcedure, setEditingProcedure] = useState<any>(null);
+  const [showGeneralProcedureModal, setShowGeneralProcedureModal] =
+    useState(false);
+  const [editingGeneralProcedure, setEditingGeneralProcedure] =
+    useState<any>(null);
+  const [viewingGeneralProcedure, setViewingGeneralProcedure] =
+    useState<any>(null);
 
   // New states for image management
   const [showAddImageModal, setShowAddImageModal] = useState(false);
@@ -217,6 +224,18 @@ export default function PatientDetailPage() {
               "Loaded chart with procedures:",
               chart.procedures?.length || 0,
             );
+
+            // Add patient name and doctor name to procedures for display
+            if (Array.isArray(chart.procedures)) {
+              chart.procedures.forEach((proc: any) => {
+                if (!proc.patientName && selectedPatient) {
+                  proc.patientName = (selectedPatient as any).name;
+                }
+                if (!proc.createdByName && user) {
+                  proc.createdByName = user.name || user.email;
+                }
+              });
+            }
 
             // Build teeth object from procedures
             const teethFromProcedures: Record<number, any> = {};
@@ -816,10 +835,80 @@ export default function PatientDetailPage() {
     setIsModalOpen(true);
   };
 
-  const refreshToothChart = async () => {
-    if (!selectedPatient || !token) return;
+  const handleViewGeneralProcedure = (procedure: any) => {
+    console.log("[v0] Viewing general procedure:", procedure);
+    setViewingGeneralProcedure(procedure);
+  };
+
+  const handleEditGeneralProcedure = (procedure: any) => {
+    console.log("[v0] Editing general procedure:", procedure);
+    setEditingGeneralProcedure(procedure);
+    setShowGeneralProcedureModal(true);
+  };
+
+  const handleDeleteGeneralProcedure = async (recordId: string) => {
+    console.log(
+      "[v0] Deleting general procedure:",
+      recordId,
+      "Chart ID:",
+      toothChart?._id,
+    );
 
     try {
+      setLoading((prev) => ({ ...prev, saveChart: true }));
+
+      if (!toothChart?._id && !toothChart?.id) {
+        toast.error("Missing tooth chart. Please create a chart first.");
+        return;
+      }
+
+      const chartId = toothChart._id || toothChart.id;
+
+      // Call API to delete general procedure with chartId as query parameter
+      const res = await fetch(
+        `/api/general-procedures/${recordId}?chartId=${chartId}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (res.ok) {
+        console.log("[v0] General procedure deleted successfully");
+        toast.success("General procedure deleted successfully");
+        // Refresh tooth chart to update the list
+        await refreshToothChart();
+      } else {
+        const errorData = await res.json();
+        console.error("[v0] Failed to delete general procedure:", errorData);
+        toast.error(errorData.error || "Failed to delete general procedure");
+      }
+    } catch (error) {
+      console.error("[v0] Delete general procedure error:", error);
+      toast.error("Failed to delete general procedure");
+    } finally {
+      setLoading((prev) => ({ ...prev, saveChart: false }));
+    }
+  };
+
+  const refreshToothChart = async () => {
+    console.log("[DEBUG] refreshToothChart called");
+    console.log("[DEBUG] selectedPatient:", selectedPatient);
+    console.log("[DEBUG] token:", token ? "exists" : "missing");
+
+    if (!selectedPatient || !token) {
+      console.log("[DEBUG] Early return - missing selectedPatient or token");
+      return;
+    }
+
+    try {
+      console.log(
+        "[DEBUG] Fetching tooth chart for patient:",
+        selectedPatient._id,
+      );
       setLoading((prev) => ({ ...prev, toothChart: true }));
       const toothChartRes = await fetch(
         `/api/tooth-chart?patientId=${selectedPatient._id}`,
@@ -828,13 +917,19 @@ export default function PatientDetailPage() {
         },
       );
 
+      console.log("[DEBUG] Tooth chart response status:", toothChartRes.status);
       if (toothChartRes.ok) {
         const data = await toothChartRes.json();
+        console.log("[DEBUG] Tooth chart data received:", data);
         const chart = data.toothChart || (data.charts && data.charts[0]);
         if (chart && chart.patientId.toString() === selectedPatient._id) {
           console.log(
             "[v0] Refreshed chart with procedures:",
             chart.procedures?.length || 0,
+          );
+          console.log(
+            "[DEBUG] General procedures count:",
+            chart.generalProcedures?.length || 0,
           );
 
           // Build teeth object from procedures to ensure visual updates
@@ -868,7 +963,30 @@ export default function PatientDetailPage() {
             "[v0] Updated teeth from procedures, total teeth with procedures:",
             Object.keys(teethFromProcedures).length,
           );
-          console.log("[v0] Chart procedures from API:", chart.procedures);
+          // Add patientName and createdByName to procedures for display
+          if (Array.isArray(chart.procedures)) {
+            chart.procedures.forEach((proc: any) => {
+              if (!proc.patientName && selectedPatient) {
+                proc.patientName = selectedPatient.name;
+              }
+              if (!proc.createdByName && user) {
+                proc.createdByName = user.name || user.email;
+              }
+            });
+          }
+
+          // Add patientName and createdByName to general procedures for display
+          if (Array.isArray(chart.generalProcedures)) {
+            chart.generalProcedures.forEach((proc: any) => {
+              if (!proc.patientName && selectedPatient) {
+                proc.patientName = selectedPatient.name;
+              }
+              if (!proc.createdByName && user) {
+                proc.createdByName = user.name || user.email;
+              }
+            });
+          }
+
           setToothChart(updatedChart);
           setToothProcedures(
             Array.isArray(chart.procedures) ? chart.procedures : [],
@@ -1330,12 +1448,27 @@ export default function PatientDetailPage() {
                             teeth={toothChart?.teeth || {}}
                             onToothClick={handleToothClick}
                             readOnly={false}
+                            patientId={patientId}
+                            token={token}
+                            toothChart={toothChart}
+                            generalProcedures={
+                              toothChart?.generalProcedures || []
+                            }
                           />
                           <ToothChartResultsTable
                             teeth={toothChart?.teeth || {}}
                             procedures={toothProcedures}
+                            generalProcedures={
+                              toothChart?.generalProcedures || []
+                            }
+                            userRole={user?.role}
                             onEdit={handleEditProcedure}
                             onDelete={handleDeleteProcedure}
+                            onViewGeneralProcedure={handleViewGeneralProcedure}
+                            onEditGeneralProcedure={handleEditGeneralProcedure}
+                            onDeleteGeneralProcedure={
+                              handleDeleteGeneralProcedure
+                            }
                             {...(user?.role === "doctor" && {
                               onViewDetails: () => {},
                             })}
@@ -1357,6 +1490,261 @@ export default function PatientDetailPage() {
                     }}
                     onSave={handleModalSave}
                   />
+                  {/* General Procedure Modal */}
+                  <GeneralProcedureModal
+                    isOpen={showGeneralProcedureModal}
+                    selectedProcedure={editingGeneralProcedure?.name || null}
+                    existingData={editingGeneralProcedure || undefined}
+                    onClose={() => {
+                      setShowGeneralProcedureModal(false);
+                      setEditingGeneralProcedure(null);
+                    }}
+                    // In your GeneralProcedureModal onSave function
+                    onSave={async (data) => {
+                      console.log(
+                        "[DEBUG] ========================================",
+                      );
+                      console.log("[DEBUG] PARENT onSave CALLED - START");
+                      console.log(
+                        "[DEBUG] ========================================",
+                      );
+                      console.log(
+                        "[DEBUG] GeneralProcedureModal onSave called with data:",
+                        data,
+                      );
+                      try {
+                        if (!toothChart?._id && !toothChart?.id) {
+                          console.log("[DEBUG] Missing tooth chart");
+                          toast.error(
+                            "Missing tooth chart. Please create a tooth chart first.",
+                          );
+                          return;
+                        }
+
+                        const chartId = toothChart._id || toothChart.id;
+                        console.log("[DEBUG] Chart ID:", chartId);
+                        console.log(
+                          "[DEBUG] Editing general procedure:",
+                          editingGeneralProcedure,
+                        );
+
+                        // Show loading state
+                        setLoading((prev) => ({ ...prev, saveChart: true }));
+
+                        let success = false;
+
+                        if (editingGeneralProcedure?._id) {
+                          console.log(
+                            "[DEBUG] Updating existing general procedure:",
+                            editingGeneralProcedure._id,
+                          );
+                          // Update existing general procedure
+                          const res = await fetch(
+                            `/api/general-procedures/${editingGeneralProcedure._id}`,
+                            {
+                              method: "PUT",
+                              headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                chartId: chartId,
+                                name: data.name,
+                                date: data.date,
+                                comments: data.comments || "",
+                              }),
+                            },
+                          );
+
+                          console.log(
+                            "[DEBUG] Update response status:",
+                            res.status,
+                          );
+                          if (res.ok) {
+                            toast.success(
+                              `General procedure "${data.name}" updated successfully`,
+                            );
+                            success = true;
+                            console.log(
+                              "[DEBUG] Update successful, success =",
+                              success,
+                            );
+                          } else {
+                            const error = await res.json();
+                            console.log(
+                              "[DEBUG] Update failed with error:",
+                              error,
+                            );
+                            toast.error(
+                              error.error ||
+                                "Failed to update general procedure",
+                            );
+                          }
+                        } else {
+                          console.log("[DEBUG] Creating new general procedure");
+                          console.log("[DEBUG] patientId:", patientId);
+                          console.log("[DEBUG] chartId:", chartId);
+                          console.log("[DEBUG] data:", data);
+
+                          // Create new general procedure
+                          const res = await fetch("/api/general-procedures", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              Authorization: `Bearer ${token}`,
+                            },
+                            body: JSON.stringify({
+                              chartId: chartId,
+                              patientId: patientId,
+                              name: data.name,
+                              date: data.date,
+                              comments: data.comments || "",
+                            }),
+                          });
+
+                          console.log(
+                            "[DEBUG] Create response status:",
+                            res.status,
+                          );
+
+                          if (res.ok) {
+                            const responseData = await res.json();
+                            console.log(
+                              "[DEBUG] Create response data:",
+                              responseData,
+                            );
+                            toast.success(
+                              `General procedure "${data.name}" saved successfully`,
+                            );
+                            success = true;
+                            console.log(
+                              "[DEBUG] Create successful, success =",
+                              success,
+                            );
+                          } else {
+                            const error = await res.json();
+                            console.log(
+                              "[DEBUG] Create failed with error:",
+                              error,
+                            );
+                            toast.error(
+                              error.error || "Failed to save general procedure",
+                            );
+                          }
+                        }
+
+                        // Clear loading state
+                        setLoading((prev) => ({ ...prev, saveChart: false }));
+
+                        console.log("[DEBUG] Final success value:", success);
+                        if (success) {
+                          console.log(
+                            "[DEBUG] Success is true, closing modal and refreshing",
+                          );
+                          // Close the modal first
+                          setShowGeneralProcedureModal(false);
+                          setEditingGeneralProcedure(null);
+
+                          // Use setTimeout to ensure modal is fully unmounted and DB is updated before refreshing
+                          // Increased timeout for create operations to ensure DB consistency
+                          setTimeout(() => {
+                            console.log("[DEBUG] Calling refreshToothChart");
+                            console.log(
+                              "[DEBUG] selectedPatient:",
+                              selectedPatient,
+                            );
+                            console.log(
+                              "[DEBUG] token:",
+                              token ? "exists" : "missing",
+                            );
+                            refreshToothChart();
+                          }, 300);
+                        } else {
+                          console.log(
+                            "[DEBUG] Success is false, not refreshing",
+                          );
+                        }
+                      } catch (error) {
+                        console.error(
+                          "[DEBUG] Error saving general procedure:",
+                          error,
+                        );
+                        toast.error("Error saving general procedure");
+                        setLoading((prev) => ({ ...prev, saveChart: false }));
+                      }
+                    }}
+                  />
+                  {/* General Procedure View Modal */}
+                  {viewingGeneralProcedure && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-background rounded-lg shadow-lg max-w-md w-full">
+                        <div className="flex justify-between items-center p-6 border-b border-border">
+                          <h2 className="text-lg font-semibold">
+                            Procedure Details
+                          </h2>
+                          <button
+                            onClick={() => setViewingGeneralProcedure(null)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Procedure Name
+                            </label>
+                            <p className="text-foreground mt-1">
+                              {viewingGeneralProcedure.name}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Date
+                            </label>
+                            <p className="text-foreground mt-1">
+                              {new Date(
+                                viewingGeneralProcedure.date,
+                              ).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Patient Name
+                            </label>
+                            <p className="text-foreground mt-1">
+                              {viewingGeneralProcedure.patientName || "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Doctor Name
+                            </label>
+                            <p className="text-foreground mt-1">
+                              {viewingGeneralProcedure.createdByName || "-"}
+                            </p>
+                          </div>
+                          <div>
+                            <label className="text-sm font-medium text-muted-foreground">
+                              Comments
+                            </label>
+                            <p className="text-foreground mt-1 whitespace-pre-wrap">
+                              {viewingGeneralProcedure.comments ||
+                                "No comments"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 justify-end p-6 border-t border-border">
+                          <button
+                            onClick={() => setViewingGeneralProcedure(null)}
+                            className="px-4 py-2 bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {/* Medical History Tab */}
                   {activeTab === "history" && (
                     <MedicalHistorySection

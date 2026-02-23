@@ -1,110 +1,128 @@
 // @ts-nocheck
-"use client"
-import { useState, useEffect } from "react"
-import { useAuth } from "@/components/auth-context"
-import { toast } from "react-hot-toast"
-import { ArrowLeft, Plus, Loader2, CreditCard, FileText, DollarSign, User, Phone, X } from "lucide-react"
-import { AddDebtModal } from "@/components/add-debt-modal"
-import { AddPaymentModal } from "@/components/add-payment-modal"
-import { PaymentHistory } from "./payment-history"
-import { BillingChart } from "./billing-chart"
-import { EditRemainingBalanceModal } from "@/components/edit-remaining-balance-modal"
-import { PatientReportsSection } from "@/components/patient-reports-section"
-import { ToothChartResultsTable } from "@/components/tooth-chart-results-table"
+"use client";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/components/auth-context";
+import { toast } from "react-hot-toast";
+import {
+  ArrowLeft,
+  Plus,
+  Loader2,
+  CreditCard,
+  FileText,
+  DollarSign,
+  User,
+  Phone,
+  X,
+} from "lucide-react";
+import { AddDebtModal } from "@/components/add-debt-modal";
+import { AddPaymentModal } from "@/components/add-payment-modal";
+import { PaymentHistory } from "./payment-history";
+import { BillingChart } from "./billing-chart";
+import { EditRemainingBalanceModal } from "@/components/edit-remaining-balance-modal";
+import { PatientReportsSection } from "@/components/patient-reports-section";
+import { ToothChartResultsTable } from "@/components/tooth-chart-results-table";
 
 export function BillingDetailPage({ patient, onBack }: any) {
-  const { token } = useAuth()
-  const [billings, setBillings] = useState([])
+  const { token } = useAuth();
+  const [billings, setBillings] = useState([]);
   const [stats, setStats] = useState({
     totalPaid: 0,
     totalDebt: 0,
     remainingBalance: 0,
-  })
-  const [loading, setLoading] = useState(false)
-  const [showAddDebt, setShowAddDebt] = useState(false)
-  const [showAddPayment, setShowAddPayment] = useState(false)
-  const [showReports, setShowReports] = useState(false)
-  const [showToothChart, setShowToothChart] = useState(false) // Renamed from showChart
-  const [showEditBalance, setShowEditBalance] = useState(false)
-  const [selectedBillingId, setSelectedBillingId] = useState(null)
-  const [toothChart, setToothChart] = useState<any>(null)
-  const [chartLoading, setChartLoading] = useState(false)
+  });
+  const [loading, setLoading] = useState(false);
+  const [showAddDebt, setShowAddDebt] = useState(false);
+  const [showAddPayment, setShowAddPayment] = useState(false);
+  const [showReports, setShowReports] = useState(false);
+  const [showToothChart, setShowToothChart] = useState(false); // Renamed from showChart
+  const [showEditBalance, setShowEditBalance] = useState(false);
+  const [selectedBillingId, setSelectedBillingId] = useState(null);
+  const [toothChart, setToothChart] = useState<any>(null);
+  const [chartLoading, setChartLoading] = useState(false);
 
   useEffect(() => {
     if (patient?.patientId) {
-      fetchTransactions()
+      fetchTransactions();
     }
-  }, [token, patient?.patientId])
+  }, [token, patient?.patientId]);
 
   const fetchTransactions = async () => {
-    if (!patient?.patientId) return
+    if (!patient?.patientId) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const res = await fetch(`/api/billing/${patient.patientId}/transactions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await fetch(
+        `/api/billing/${patient.patientId}/transactions`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
       if (res.ok) {
-        const data = await res.json()
-        setBillings(data.billings || [])
-        setStats(data.stats || { totalPaid: 0, totalDebt: 0, remainingBalance: 0 })
+        const data = await res.json();
+        setBillings(data.billings || []);
+        setStats(
+          data.stats || { totalPaid: 0, totalDebt: 0, remainingBalance: 0 },
+        );
       } else {
-        toast.error("Failed to load billing data")
+        toast.error("Failed to load billing data");
       }
     } catch (error) {
-      toast.error("Failed to load billing data")
+      toast.error("Failed to load billing data");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleDebtAdded = () => {
-    setShowAddDebt(false)
-    toast.success("Debt added successfully")
+    setShowAddDebt(false);
+    toast.success("Debt added successfully");
     setTimeout(() => {
-      fetchTransactions()
-    }, 300)
-  }
+      fetchTransactions();
+    }, 300);
+  };
 
   const handlePaymentAdded = () => {
-    setShowAddPayment(false)
+    setShowAddPayment(false);
     // toast.success("Payment recorded successfully")
     setTimeout(() => {
-      fetchTransactions()
-    }, 300)
-  }
+      fetchTransactions();
+    }, 300);
+  };
 
   const handleEditRemainingBalance = (billingId: string) => {
-    setSelectedBillingId(billingId)
-    setShowEditBalance(true)
-  }
+    setSelectedBillingId(billingId);
+    setShowEditBalance(true);
+  };
 
   const handleBalanceUpdated = () => {
-    setShowEditBalance(false)
-    setSelectedBillingId(null)
+    setShowEditBalance(false);
+    setSelectedBillingId(null);
     setTimeout(() => {
-      fetchTransactions()
-    }, 300)
-  }
+      fetchTransactions();
+    }, 300);
+  };
 
   const fetchToothChart = async () => {
-    if (!patient?.patientId) return
-    
+    if (!patient?.patientId) return;
+
     try {
-      setChartLoading(true)
-      const res = await fetch(`/api/tooth-chart?patientId=${patient.patientId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      
+      setChartLoading(true);
+      const res = await fetch(
+        `/api/tooth-chart?patientId=${patient.patientId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
       if (res.ok) {
-        const data = await res.json()
-        const chart = data.toothChart || (data.charts && data.charts[0])
+        const data = await res.json();
+        const chart = data.toothChart || (data.charts && data.charts[0]);
         if (chart) {
           // Build teeth object from procedures for visual display
-          const teethFromProcedures: Record<number, any> = {}
+          const teethFromProcedures: Record<number, any> = {};
           if (Array.isArray(chart.procedures) && chart.procedures.length > 0) {
             chart.procedures.forEach((proc: any) => {
-              const toothNum = proc.toothNumber
+              const toothNum = proc.toothNumber;
               if (toothNum && !teethFromProcedures[toothNum]) {
                 teethFromProcedures[toothNum] = {
                   status: "filling",
@@ -113,29 +131,29 @@ export function BillingDetailPage({ patient, onBack }: any) {
                   notes: proc.comments,
                   date: proc.date,
                   fillingType: proc.fillingType,
-                }
+                };
               }
-            })
+            });
           }
-          
+
           setToothChart({
             ...chart,
             teeth: {
               ...(chart.teeth || {}),
               ...teethFromProcedures,
             },
-          })
+          });
         }
       } else {
-        toast.error("Failed to load tooth chart")
+        toast.error("Failed to load tooth chart");
       }
     } catch (error) {
-      console.error("[v0] Error fetching tooth chart:", error)
-      toast.error("Failed to load tooth chart")
+      console.error("[v0] Error fetching tooth chart:", error);
+      toast.error("Failed to load tooth chart");
     } finally {
-      setChartLoading(false)
+      setChartLoading(false);
     }
-  }
+  };
 
   const handleToggleToothChart = () => {
     if (!showToothChart) {
@@ -143,7 +161,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
       fetchToothChart();
     }
     setShowToothChart(!showToothChart);
-  }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -213,11 +231,15 @@ export function BillingDetailPage({ patient, onBack }: any) {
               <User className="w-6 h-6 text-primary" />
             </div>
             <div className="flex-1">
-              <h1 className="text-xl sm:text-2xl font-bold text-foreground">{patient?.name || "Unknown Patient"}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground">
+                {patient?.name || "Unknown Patient"}
+              </h1>
               <div className="flex flex-wrap items-center gap-3 mt-2">
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Phone className="w-3.5 h-3.5" />
-                  {patient?.phones?.find((p: any) => p.isPrimary)?.number || patient?.phone || "No phone"}
+                  {patient?.phones?.find((p: any) => p.isPrimary)?.number ||
+                    patient?.phone ||
+                    "No phone"}
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                   <span className="text-xs font-medium px-2 py-1 bg-muted rounded">
@@ -234,7 +256,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
           <div className="mb-8 bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
             <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Tooth Chart - {patient?.name}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground">
+                  Tooth Chart - {patient?.name}
+                </h2>
                 <button
                   onClick={() => setShowToothChart(false)}
                   className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -246,17 +270,25 @@ export function BillingDetailPage({ patient, onBack }: any) {
               {chartLoading ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <Loader2 className="w-8 h-8 text-primary animate-spin mb-3" />
-                  <p className="text-muted-foreground">Loading tooth chart...</p>
+                  <p className="text-muted-foreground">
+                    Loading tooth chart...
+                  </p>
                 </div>
-              ) : toothChart?.procedures && toothChart.procedures.length > 0 ? (
+              ) : (toothChart?.procedures &&
+                  toothChart.procedures.length > 0) ||
+                (toothChart?.generalProcedures &&
+                  toothChart.generalProcedures.length > 0) ? (
                 <ToothChartResultsTable
                   teeth={toothChart.teeth || {}}
-                  procedures={toothChart.procedures}
+                  procedures={toothChart.procedures || []}
+                  generalProcedures={toothChart.generalProcedures || []}
                   onViewDetails={() => {}}
                 />
               ) : (
                 <div className="bg-muted rounded-lg p-8 text-center">
-                  <p className="text-muted-foreground">No procedures recorded for this patient</p>
+                  <p className="text-muted-foreground">
+                    No procedures recorded for this patient
+                  </p>
                 </div>
               )}
             </div>
@@ -267,7 +299,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 bg-card rounded-xl border border-border">
             <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-            <p className="text-muted-foreground font-medium">Loading billing information...</p>
+            <p className="text-muted-foreground font-medium">
+              Loading billing information...
+            </p>
           </div>
         ) : (
           <>
@@ -286,8 +320,12 @@ export function BillingDetailPage({ patient, onBack }: any) {
                         <DollarSign className="w-5 h-5 text-accent" />
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Total Paid</p>
-                        <p className="text-2xl font-bold text-accent">${(stats?.totalPaid || 0).toFixed(2)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Total Paid
+                        </p>
+                        <p className="text-2xl font-bold text-accent">
+                          ${(stats?.totalPaid || 0).toFixed(2)}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -309,13 +347,19 @@ export function BillingDetailPage({ patient, onBack }: any) {
                         <FileText className="w-5 h-5 text-primary" />
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Total Debt</p>
-                        <p className="text-2xl font-bold text-foreground">${(stats?.totalDebt || 0).toFixed(2)}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Total Debt
+                        </p>
+                        <p className="text-2xl font-bold text-foreground">
+                          ${(stats?.totalDebt || 0).toFixed(2)}
+                        </p>
                       </div>
                     </div>
                     {billings.length > 0 && (
                       <button
-                        onClick={() => handleEditRemainingBalance(billings[0]?._id)}
+                        onClick={() =>
+                          handleEditRemainingBalance(billings[0]?._id)
+                        }
                         className="px-3 py-1.5 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors whitespace-nowrap ml-2 cursor-pointer"
                       >
                         Edit
@@ -327,27 +371,37 @@ export function BillingDetailPage({ patient, onBack }: any) {
                 {/* Remaining Balance */}
                 <div
                   className={`bg-card rounded-xl border p-5 hover:border-primary/50 transition-colors duration-200 ${
-                    (stats?.remainingBalance || 0) > 0 ? "border-destructive/20" : "border-accent/20"
+                    (stats?.remainingBalance || 0) > 0
+                      ? "border-destructive/20"
+                      : "border-accent/20"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3 flex-1">
                       <div
                         className={`p-2 rounded-lg ${
-                          (stats?.remainingBalance || 0) > 0 ? "bg-destructive/10" : "bg-accent/10"
+                          (stats?.remainingBalance || 0) > 0
+                            ? "bg-destructive/10"
+                            : "bg-accent/10"
                         }`}
                       >
                         <CreditCard
                           className={`w-5 h-5 ${
-                            (stats?.remainingBalance || 0) > 0 ? "text-destructive" : "text-accent"
+                            (stats?.remainingBalance || 0) > 0
+                              ? "text-destructive"
+                              : "text-accent"
                           }`}
                         />
                       </div>
                       <div>
-                        <p className="text-sm text-muted-foreground">Remaining Balance</p>
+                        <p className="text-sm text-muted-foreground">
+                          Remaining Balance
+                        </p>
                         <p
                           className={`text-2xl font-bold ${
-                            (stats?.remainingBalance || 0) > 0 ? "text-destructive" : "text-accent"
+                            (stats?.remainingBalance || 0) > 0
+                              ? "text-destructive"
+                              : "text-accent"
                           }`}
                         >
                           ${(stats?.remainingBalance || 0).toFixed(2)}
@@ -356,7 +410,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
                     </div>
                     {billings.length > 0 && (
                       <button
-                        onClick={() => handleEditRemainingBalance(billings[0]?._id)}
+                        onClick={() =>
+                          handleEditRemainingBalance(billings[0]?._id)
+                        }
                         className="px-3 py-1.5 text-xs font-medium bg-primary hover:bg-primary/90 text-primary-foreground rounded-md transition-colors whitespace-nowrap ml-2 cursor-pointer"
                       >
                         Edit
@@ -366,12 +422,19 @@ export function BillingDetailPage({ patient, onBack }: any) {
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-700 ease-out ${
-                        (stats?.remainingBalance || 0) > 0 ? "bg-destructive" : "bg-accent"
+                        (stats?.remainingBalance || 0) > 0
+                          ? "bg-destructive"
+                          : "bg-accent"
                       }`}
                       style={{
                         width: `${
                           stats?.totalDebt
-                            ? Math.min(100, (Math.abs(stats.remainingBalance) / stats.totalDebt) * 100)
+                            ? Math.min(
+                                100,
+                                (Math.abs(stats.remainingBalance) /
+                                  stats.totalDebt) *
+                                  100,
+                              )
                             : 0
                         }%`,
                       }}
@@ -393,7 +456,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-card rounded-lg border border-border p-4 sm:p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-lg">
               <div className="flex items-center justify-between mb-4 sm:mb-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-foreground">Appointment Reports - {patient?.name}</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-foreground">
+                  Appointment Reports - {patient?.name}
+                </h2>
                 <button
                   onClick={() => setShowReports(false)}
                   className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -402,7 +467,11 @@ export function BillingDetailPage({ patient, onBack }: any) {
                 </button>
               </div>
 
-              <PatientReportsSection patientId={patient?.patientId} token={token} isDoctor={false} />
+              <PatientReportsSection
+                patientId={patient?.patientId}
+                token={token}
+                isDoctor={false}
+              />
             </div>
           </div>
         )}
@@ -437,5 +506,5 @@ export function BillingDetailPage({ patient, onBack }: any) {
         )}
       </main>
     </div>
-  )
+  );
 }

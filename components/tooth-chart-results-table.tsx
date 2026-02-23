@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmDeleteModal } from "./confirm-delete-modal";
 
 interface ToothRecord {
@@ -22,14 +23,33 @@ interface ToothRecord {
   fillingType?: string;
   rootCanalType?: string;
   createdBy?: string;
+  createdByName?: string;
+  patientName?: string;
+}
+
+interface GeneralProcedureRecord {
+  _id?: string;
+  id?: string;
+  name: string;
+  date: string;
+  comments?: string;
+  notes?: string;
+  createdBy?: string;
+  createdByName?: string;
+  patientName?: string;
 }
 
 interface ToothChartResultsTableProps {
   teeth: Record<number, any>;
   procedures?: ToothRecord[];
+  generalProcedures?: GeneralProcedureRecord[];
+  userRole?: string;
   onEdit?: (record: ToothRecord) => void;
   onDelete?: (recordId: string) => Promise<void> | void;
   onViewDetails?: (record: ToothRecord) => void;
+  onViewGeneralProcedure?: (record: GeneralProcedureRecord) => void;
+  onEditGeneralProcedure?: (record: GeneralProcedureRecord) => void;
+  onDeleteGeneralProcedure?: (recordId: string) => Promise<void> | void;
 }
 
 const ITEMS_PER_PAGE = {
@@ -60,17 +80,25 @@ const formatDate = (dateString: string | Date): string => {
 export function ToothChartResultsTable({
   teeth,
   procedures = [],
+  generalProcedures = [],
+  userRole,
   onEdit,
   onDelete,
   onViewDetails,
+  onViewGeneralProcedure,
+  onEditGeneralProcedure,
+  onDeleteGeneralProcedure,
 }: ToothChartResultsTableProps) {
-  console.log("[Table] Received procedures:", procedures);
   const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<"general" | "tooth">(
+    generalProcedures && generalProcedures.length > 0 ? "general" : "tooth"
+  );
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
     recordIds?: string[];
     toothNumbers?: number[];
     procedure?: string;
+    isGeneralProcedure?: boolean;
   }>({
     isOpen: false,
   });
@@ -81,26 +109,32 @@ export function ToothChartResultsTable({
   }>({
     isOpen: false,
   });
+  const [viewGeneralProcedureModal, setViewGeneralProcedureModal] = useState<{
+    isOpen: boolean;
+    record?: GeneralProcedureRecord;
+  }>({
+    isOpen: false,
+  });
 
   // Handle delete confirmation - supports deleting multiple grouped records
   const handleDeleteConfirm = async () => {
-    if (
-      !deleteModal.recordIds ||
-      deleteModal.recordIds.length === 0 ||
-      !onDelete
-    )
-      return;
-
     try {
       setIsDeleting(true);
-      console.log("[v0] Deleting procedures:", deleteModal.recordIds);
-      // Delete all records in the group
-      for (const recordId of deleteModal.recordIds) {
-        await onDelete(recordId);
+      
+      if (deleteModal.isGeneralProcedure && deleteModal.recordIds && onDeleteGeneralProcedure) {
+        // Handle general procedure deletion
+        for (const recordId of deleteModal.recordIds) {
+          await onDeleteGeneralProcedure(recordId);
+        }
+      } else if (!deleteModal.isGeneralProcedure && deleteModal.recordIds && onDelete) {
+        // Handle tooth procedure deletion
+        for (const recordId of deleteModal.recordIds) {
+          await onDelete(recordId);
+        }
       }
       setDeleteModal({ isOpen: false });
     } catch (error) {
-      console.error("[v0] Delete error:", error);
+      console.error("Delete error:", error);
     } finally {
       setIsDeleting(false);
     }
@@ -109,11 +143,6 @@ export function ToothChartResultsTable({
   // Use procedures array directly from database and group by same procedure
   const tableData = useMemo(() => {
     if (procedures && procedures.length > 0) {
-      console.log(
-        "[v0] Using procedures from database:",
-        procedures.length,
-        "procedures",
-      );
 
       // Group procedures by matching attributes
       const grouped = procedures.reduce(
@@ -141,14 +170,16 @@ export function ToothChartResultsTable({
         {} as Record<string, any>,
       );
 
-      // Convert to array and sort by first tooth number, then by date
+      // Convert to array and sort by date (newest first), then by tooth number
       return Object.values(grouped).sort((a: any, b: any) => {
-        const aFirstTooth = Math.min(...a.toothNumbers);
-        const bFirstTooth = Math.min(...b.toothNumbers);
-        if (aFirstTooth === bFirstTooth) {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
+        if (dateA === dateB) {
+          const aFirstTooth = Math.min(...a.toothNumbers);
+          const bFirstTooth = Math.min(...b.toothNumbers);
+          return aFirstTooth - bFirstTooth;
         }
-        return aFirstTooth - bFirstTooth;
+        return dateB - dateA; // Newest first
       });
     }
     return [];
@@ -204,6 +235,145 @@ export function ToothChartResultsTable({
         Procedure Records
       </h3>
 
+      {/* Tabs for General and Tooth Procedures */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "general" | "tooth")} className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="general" className="relative">
+            General Procedures
+            {generalProcedures && generalProcedures.length > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-white bg-green-600 rounded-full">
+                {generalProcedures.length}
+              </span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="tooth" className="relative">
+            Tooth Procedures
+            {tableData.length > 0 && (
+              <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-semibold text-white bg-blue-600 rounded-full">
+                {tableData.length}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* General Procedures Tab */}
+        <TabsContent value="general" className="space-y-4">
+          {generalProcedures && generalProcedures.length > 0 ? (
+            <div className="rounded-lg border border-green-200 bg-green-50 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted border-b border-border">
+                      <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                        Date
+                      </th>
+                      <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                        Procedure Name
+                      </th>
+                      {/* <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                        Patient Name
+                      </th> */}
+                      <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                        Doctor Name
+                      </th>
+                      <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap w-48">
+                        Comments
+                      </th>
+                      <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {generalProcedures.map((proc) => (
+                      <tr
+                        key={proc._id || proc.id || proc.name}
+                        className="border-b border-border hover:bg-muted/30 transition-colors last:border-b-0"
+                      >
+                        <td className="py-2 px-3 text-foreground text-xs sm:text-sm whitespace-nowrap">
+                          {formatDate(proc.date)}
+                        </td>
+                        <td className="py-2 px-3 text-foreground text-xs sm:text-sm font-medium">
+                          {proc.name}
+                        </td>
+                        {/* <td className="py-2 px-3 text-foreground text-xs sm:text-sm">
+                          {proc.patientName || "-"}
+                        </td> */}
+                        <td className="py-2 px-3 text-foreground text-xs sm:text-sm">
+                          {proc.createdByName || proc.createdBy || "-"}
+                        </td>
+                        <td className="py-2 px-3 text-muted-foreground text-xs sm:text-sm max-w-xs">
+                          {proc.comments || proc.notes ? (
+                            <div className="line-clamp-1" title={proc.comments || proc.notes}>
+                              {proc.comments || proc.notes}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground/50">-</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-foreground whitespace-nowrap">
+                          <div className="flex gap-2">
+                            {/* View Button - visible to all */}
+                            <button
+                              onClick={() =>
+                                setViewGeneralProcedureModal({
+                                  isOpen: true,
+                                  record: proc,
+                                })
+                              }
+                              className="p-2 text-blue-600 hover:bg-blue-100 rounded transition-colors cursor-pointer"
+                              title="View Details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {/* Edit Button - only for doctors */}
+                            {userRole === "doctor" && onEditGeneralProcedure !== undefined && (
+                              <button
+                                onClick={() =>
+                                  onEditGeneralProcedure(proc)
+                                }
+                                className="p-2 text-primary hover:bg-primary/10 rounded transition-colors cursor-pointer"
+                                title="Edit"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                            )}
+                            {/* Delete Button - only for doctors */}
+                            {userRole === "doctor" && (proc._id || proc.id) && (
+                              <button
+                                onClick={() =>
+                                  setDeleteModal({
+                                    isOpen: true,
+                                    recordIds: [(proc._id || proc.id)!],
+                                    isGeneralProcedure: true,
+                                  })
+                                }
+                                className="p-2 text-destructive hover:bg-destructive/10 rounded transition-colors cursor-pointer"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-card border border-border rounded-lg p-4 sm:p-6 text-center">
+              <p className="text-muted-foreground text-sm sm:text-base">
+                No general procedures recorded yet. Select a procedure from the dropdown to add one.
+              </p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Tooth Procedures Tab */}
+        <TabsContent value="tooth" className="space-y-4">
+
       {/* Container for responsive table */}
       <div className="rounded-lg border border-border overflow-hidden">
         {/* Large screens (lg and above) - Full table */}
@@ -211,6 +381,15 @@ export function ToothChartResultsTable({
           <table className="w-full text-sm xl:text-base">
             <thead>
               <tr className="bg-muted border-b border-border">
+                <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                  Date
+                </th>
+                {/* <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                  Patient Name
+                </th> */}
+                <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
+                  Doctor Name
+                </th>
                 <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
                   Tooth #
                 </th>
@@ -231,9 +410,6 @@ export function ToothChartResultsTable({
                 <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap w-48">
                   Comments
                 </th>
-                <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
-                  Date
-                </th>
                 {(onEdit || onDelete || onViewDetails) && (
                   <th className="text-left py-2 px-3 font-semibold text-foreground whitespace-nowrap">
                     Actions
@@ -247,6 +423,15 @@ export function ToothChartResultsTable({
                   key={`${record._id || record.toothNumbers?.[0] || record.toothNumber}-${index}`}
                   className="border-b border-border hover:bg-muted/30 transition-colors last:border-b-0"
                 >
+                  <td className="py-1.5 px-3 text-muted-foreground text-sm whitespace-nowrap align-middle font-medium">
+                    {formatDate(record.date)}
+                  </td>
+                  {/* <td className="py-1.5 px-3 text-foreground text-sm whitespace-nowrap align-middle">
+                    {record.patientName || "-"}
+                  </td> */}
+                  <td className="py-1.5 px-3 text-foreground text-sm whitespace-nowrap align-middle">
+                    {record.createdByName || record.createdBy || "-"}
+                  </td>
                   <td className="py-1.5 px-3 font-medium text-foreground align-middle">
                     <div className="flex flex-wrap gap-0.5">
                       {(record.toothNumbers || [record.toothNumber])
@@ -285,16 +470,13 @@ export function ToothChartResultsTable({
                     {record.diagnosis || "-"}
                   </td>
                   <td className="py-1.5 px-3 text-muted-foreground text-sm w-48 align-middle">
-                    {record.comments ? (
-                      <div className="line-clamp-1" title={record.comments}>
-                        {record.comments}
+                    {record.comments || record.notes ? (
+                      <div className="line-clamp-1" title={record.comments || record.notes}>
+                        {record.comments || record.notes}
                       </div>
                     ) : (
                       <span className="text-muted-foreground/50">-</span>
                     )}
-                  </td>
-                  <td className="py-1.5 px-3 text-muted-foreground text-sm whitespace-nowrap align-middle">
-                    {formatDate(record.date)}
                   </td>
                   {(onEdit || onDelete || onViewDetails) && (
                     <td className="py-1.5 px-3 text-foreground whitespace-nowrap align-middle">
@@ -357,16 +539,19 @@ export function ToothChartResultsTable({
               <thead>
                 <tr className="bg-muted border-b border-border">
                   <th className="text-left py-3 px-4 font-semibold text-foreground">
+                    Date
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-foreground">
+                    Patient
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-foreground">
+                    Doctor
+                  </th>
+                  <th className="text-left py-3 px-4 font-semibold text-foreground">
                     Tooth #
                   </th>
                   <th className="text-left py-3 px-4 font-semibold text-foreground">
-                    Sides
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-foreground">
                     Procedure
-                  </th>
-                  <th className="text-left py-3 px-4 font-semibold text-foreground">
-                    Date
                   </th>
                   {(onEdit || onDelete || onViewDetails) && (
                     <th className="text-left py-3 px-4 font-semibold text-foreground">
@@ -381,6 +566,15 @@ export function ToothChartResultsTable({
                     key={`${record._id || record.toothNumbers?.[0] || record.toothNumber}-${index}`}
                     className="border-b border-border hover:bg-muted/30 transition-colors last:border-b-0"
                   >
+                    <td className="py-3 px-4 text-muted-foreground text-xs font-medium whitespace-nowrap">
+                      {formatDate(record.date)}
+                    </td>
+                    <td className="py-3 px-4 text-foreground text-xs whitespace-nowrap">
+                      {record.patientName || "-"}
+                    </td>
+                    <td className="py-3 px-4 text-foreground text-xs whitespace-nowrap">
+                      {record.createdByName || record.createdBy || "-"}
+                    </td>
                     <td className="py-3 px-4 font-medium text-foreground">
                       <div className="flex flex-wrap gap-1">
                         {(record.toothNumbers || [record.toothNumber])
@@ -393,18 +587,6 @@ export function ToothChartResultsTable({
                               #{toothNum}
                             </span>
                           ))}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-foreground">
-                      <div className="flex flex-wrap gap-1">
-                        {record.sides?.map((side) => (
-                          <span
-                            key={side}
-                            className="inline-block bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] font-medium"
-                          >
-                            {side}
-                          </span>
-                        ))}
                       </div>
                     </td>
                     <td className="py-3 px-4 text-foreground">
@@ -431,9 +613,6 @@ export function ToothChartResultsTable({
                           </div>
                         )}
                       </div>
-                    </td>
-                    <td className="py-3 px-4 text-muted-foreground text-xs">
-                      {formatDate(record.date)}
                     </td>
                     {(onEdit || onDelete || onViewDetails) && (
                       <td className="py-3 px-4 text-foreground">
@@ -774,6 +953,8 @@ export function ToothChartResultsTable({
           ))}
         </div>
       </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Responsive Pagination Controls */}
       {totalPages > 1 && (
@@ -909,6 +1090,85 @@ export function ToothChartResultsTable({
 
               <button
                 onClick={() => setDetailsModal({ isOpen: false })}
+                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm sm:text-base cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View General Procedure Modal */}
+      <Dialog
+        open={viewGeneralProcedureModal.isOpen}
+        onOpenChange={(open) => 
+          setViewGeneralProcedureModal({ 
+            ...viewGeneralProcedureModal, 
+            isOpen: open 
+          })
+        }
+      >
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base sm:text-lg">
+              Procedure Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {viewGeneralProcedureModal.record && (
+            <div className="space-y-4 text-sm sm:text-base">
+              <div className="bg-muted rounded-lg p-3 sm:p-4 space-y-3 sm:space-y-4">
+                <div>
+                  <span className="font-semibold text-foreground">
+                    Procedure Name:
+                  </span>
+                  <p className="mt-1 text-foreground">
+                    {viewGeneralProcedureModal.record.name}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-foreground">
+                    Date:
+                  </span>
+                  <p className="mt-1 text-foreground">
+                    {new Date(viewGeneralProcedureModal.record.date).toLocaleDateString()}
+                  </p>
+                </div>
+
+                {/* <div>
+                  <span className="font-semibold text-foreground">
+                    Patient Name:
+                  </span>
+                  <p className="mt-1 text-foreground">
+                    {viewGeneralProcedureModal.record.patientName || "-"}
+                  </p>
+                </div> */}
+
+                <div>
+                  <span className="font-semibold text-foreground">
+                    Doctor Name:
+                  </span>
+                  <p className="mt-1 text-foreground">
+                    {viewGeneralProcedureModal.record.createdByName || "-"}
+                  </p>
+                </div>
+
+                {viewGeneralProcedureModal.record.comments && (
+                  <div className="pt-2 border-t border-border">
+                    <span className="font-semibold text-foreground">
+                      Comments:
+                    </span>
+                    <p className="mt-1 text-foreground whitespace-pre-wrap text-sm">
+                      {viewGeneralProcedureModal.record.comments}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={() => setViewGeneralProcedureModal({ isOpen: false })}
                 className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm sm:text-base cursor-pointer"
               >
                 Close
