@@ -1454,6 +1454,7 @@ export default function PatientDetailPage() {
                             generalProcedures={
                               toothChart?.generalProcedures || []
                             }
+                            onGeneralProcedureSaved={refreshToothChart}
                           />
                           <ToothChartResultsTable
                             teeth={toothChart?.teeth || {}}

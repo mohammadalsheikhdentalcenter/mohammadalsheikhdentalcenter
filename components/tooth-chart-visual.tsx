@@ -39,6 +39,7 @@ interface ToothChartProps {
   token?: string;
   onGeneralProcedureAdd?: (procedure: GeneralProcedure) => void;
   onGeneralProcedureRemove?: (procedureId: string) => void;
+  onGeneralProcedureSaved?: () => void;
 }
 
 const GENERAL_PROCEDURES = [
@@ -66,6 +67,7 @@ export function ToothChartVisual({
   token,
   onGeneralProcedureAdd,
   onGeneralProcedureRemove,
+  onGeneralProcedureSaved,
 }: ToothChartProps) {
   const [selectedTooth, setSelectedTooth] = useState<number | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -692,18 +694,22 @@ export function ToothChartVisual({
                 `General procedure "${data.name}" saved successfully`,
               );
 
-              // Add procedure to local list with full object
-              if (responseData.procedure) {
-                onGeneralProcedureAdd?.(responseData.procedure);
-              }
-
               // Close modal
               setShowGeneralProcedureModal(false);
               setSelectedGeneralProcedure(null);
 
-              // Reload the page to refresh all data
-              console.log("[DEBUG VISUAL] Reloading page to refresh data");
-              window.location.reload();
+              // Call the callback to refresh tooth chart data
+              console.log(
+                "[DEBUG VISUAL] Calling onGeneralProcedureSaved callback",
+              );
+              if (onGeneralProcedureSaved) {
+                onGeneralProcedureSaved();
+              } else {
+                console.log(
+                  "[DEBUG VISUAL] No callback provided, reloading page",
+                );
+                window.location.reload();
+              }
             } else {
               const error = await res.json();
               console.log("[DEBUG VISUAL] Error response:", error);
