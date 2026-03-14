@@ -47,9 +47,11 @@ const GENERAL_PROCEDURES = [
   "Teeth Whitening",
   "Home Bleach",
   "Scaling",
-  "Professional Cleaning",
+  "G.B.T.",
   "Fluoride Treatment",
-  "Dental Sealant",
+  "Fissure Sealant",
+  "Consultation",
+  
 ];
 
 export function ToothChartVisual({

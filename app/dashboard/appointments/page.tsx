@@ -439,7 +439,10 @@ export default function AppointmentsPage() {
 
   const getAppointmentsForDate = (date: Date) => {
     const dateStr = formatDateToLocalString(date);
-    return appointments.filter((apt) => apt.date === dateStr);
+    return appointments.filter((apt) => {
+      const status = (apt.status || "").toLowerCase().trim();
+      return apt.date === dateStr && status !== "cancelled" && status !== "closed" && status !== "completed";
+    });
   };
 
   const handlePreviousMonth = () => {

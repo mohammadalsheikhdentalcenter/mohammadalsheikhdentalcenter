@@ -34,6 +34,7 @@ const COMMON_PROCEDURES = [
   "Extraction",
   "Bridge",
   "Implant",
+  "Veneers"
 ];
 
 interface ToothModalProps {
@@ -174,10 +175,10 @@ export function ToothChartModal({
     }
   }, [isOpen, existingData, toothNumber]);
 
-  // Auto-select all sides when "Whitening" is selected
+  // Auto-select all sides when "Whitening" or "Crown" is selected
   useEffect(() => {
     const selectedProcedure = showCustom ? customProcedure : procedure;
-    if (selectedProcedure.toLowerCase() === "whitening") {
+    if (selectedProcedure.toLowerCase() === "whitening" || selectedProcedure.toLowerCase() === "crown") {
       setSelectedSides(TOOTH_SIDES);
     }
   }, [procedure, customProcedure, showCustom]);
@@ -361,7 +362,7 @@ export function ToothChartModal({
           {/* Tooth Sides */}
           <div className="space-y-2">
             <Label className="text-sm font-medium">Select Tooth Sides</Label>
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+            <div className="grid grid-cols-6  gap-2">
               {TOOTH_SIDES.map((side) => (
                 <button
                   key={side}

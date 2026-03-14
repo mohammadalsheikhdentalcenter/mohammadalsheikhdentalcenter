@@ -173,6 +173,13 @@ export default function PatientDetailPage() {
     setCurrentPage(1); // Reset to first page when filter changes
   }, [selectedDoctorFilter, reports]);
 
+  // Fetch appointments when create report modal opens
+  useEffect(() => {
+    if (showCreateReportModal && selectedPatient && token) {
+      fetchPatientAppointments(selectedPatient._id || selectedPatient.id);
+    }
+  }, [showCreateReportModal, selectedPatient, token]);
+
   // Helper function for appointment status colors
   const getAppointmentStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
