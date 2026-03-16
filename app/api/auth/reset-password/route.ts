@@ -4,10 +4,11 @@ import { verifyToken } from "@/lib/auth"
 import bcrypt from "bcryptjs"
 import { sendStaffCredentials } from "@/lib/email"
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
 
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -17,8 +18,6 @@ export async function POST(request: Request, { params }: { params: { id: string 
     if (!payload || (payload.role !== "admin" && payload.role !== "hr")) {
       return NextResponse.json({ error: "Unauthorized - Admin or HR access required" }, { status: 403 })
     }
-
-    const { id } = params
 
     // Find the staff member
     const staffMember = await User.findById(id)

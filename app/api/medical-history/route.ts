@@ -178,13 +178,47 @@ export async function POST(request: NextRequest) {
       await history.save()
     }
 
-    const mainDoctor = await User.findById(history.doctorId).select("name specialty")
+    // Fetch fresh history with proper entry formatting
+    const freshHistory = await MedicalHistory.findOne({ patientId }).lean()
+    
+    let processedEntries = []
+    if (freshHistory && freshHistory.entries?.length > 0) {
+      processedEntries = await Promise.all(
+        freshHistory.entries.map(async (e: any) => {
+          let doctorName = e.doctorName || "Unknown"
+          let createdByName = e.createdByName || "Unknown"
+          const createdById = e.createdById ? String(e.createdById) : (e.doctorId ? String(e.doctorId) : null)
+
+          if (e.doctorId && !e.doctorName) {
+            const doc = await User.findById(e.doctorId).select("name specialty")
+            doctorName = doc?.name || "Unknown"
+          }
+
+          if (createdById && !e.createdByName) {
+            const creator = await User.findById(createdById).select("name specialty")
+            createdByName = creator?.name || "Unknown"
+          }
+
+          return {
+            ...e,
+            _id: e._id ? String(e._id) : undefined,
+            createdById,
+            doctorName,
+            createdByName,
+          }
+        }),
+      )
+    }
 
     return NextResponse.json({
       success: true,
       history: {
-        ...history.toObject(),
-        doctorId: mainDoctor,
+        _id: freshHistory?._id ? String(freshHistory._id) : null,
+        patientId,
+        entries: processedEntries,
+        doctorId: null,
+        createdAt: freshHistory?.createdAt,
+        updatedAt: freshHistory?.updatedAt,
       },
     })
   } catch (error) {

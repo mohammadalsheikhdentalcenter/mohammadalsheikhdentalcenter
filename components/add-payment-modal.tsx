@@ -62,9 +62,10 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
       })
 
       if (res.ok) {
-        onClose()
-        onSuccess()
-
+        console.log("[v0] Add Payment: Update successful, invoking onSuccess callback")
+        toast.success("Payment recorded successfully")
+        
+        // Reset form first
         setFormData({
           cash: "",
           card: "",
@@ -74,13 +75,27 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
           date: new Date().toISOString().split("T")[0],
         })
         setWithoutDebt(false)
-        toast.success("Payment recorded successfully")
+        
+        // Call onSuccess to refresh data first
+        if (onSuccess) {
+          console.log("[v0] Add Payment: Calling onSuccess callback")
+          onSuccess()
+        } else {
+          console.warn("[v0] Add Payment: onSuccess callback not provided")
+        }
+        
+        // Close modal after refresh completes
+        setTimeout(() => {
+          console.log("[v0] Add Payment: Closing modal after refresh")
+          onClose()
+        }, 100)
       } else {
         const data = await res.json()
+        console.log("[v0] Add Payment: Error response:", data.error)
         toast.error(data.error || "Failed to record payment")
       }
     } catch (error) {
-      console.error("Failed to add payment:", error)
+      console.error("[v0] Add Payment: Failed to add payment:", error)
       toast.error("Error recording payment")
     } finally {
       setLoading(false)
@@ -180,7 +195,7 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
             <button
               type="submit"
               disabled={loading || totalPayment <= 0}
-              className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-accent-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-accent-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Record Payment
@@ -189,7 +204,7 @@ export function AddPaymentModal({ patientId, remainingBalance, isOpen, onClose, 
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-muted hover:bg-muted/80 disabled:opacity-50 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 bg-muted hover:bg-muted/80 disabled:opacity-50 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer"
             >
               Cancel
             </button>

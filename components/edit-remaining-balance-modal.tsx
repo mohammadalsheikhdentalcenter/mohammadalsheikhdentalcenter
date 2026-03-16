@@ -39,8 +39,6 @@ export function EditRemainingBalanceModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    console.log("[v0] Form submitted with mode:", editMode, formData)
-    
     // Validation for debt
     if (editMode === "debt") {
       if (formData.totalDebt < 0) {
@@ -84,10 +82,6 @@ export function EditRemainingBalanceModal({
       } else if (editMode === "balance") {
         requestBody.remainingBalance = Number(formData.remainingBalance)
       }
-      
-      console.log("[v0] Sending request body to /api/billing/${billingId}/debt:", requestBody)
-      console.log("[v0] Billing ID:", billingId)
-      console.log("[v0] Token present:", !!token)
 
       const res = await fetch(`/api/billing/${billingId}/debt`, {
         method: "PUT",
@@ -97,23 +91,27 @@ export function EditRemainingBalanceModal({
         },
         body: JSON.stringify(requestBody),
       })
-
-      console.log("[v0] Response status:", res.status)
       
       const responseData = await res.json()
-      console.log("[v0] Response data:", responseData)
 
       if (res.ok) {
-        console.log("[v0] Update successful, closing modal")
-        onClose()
-        onSuccess()
+        console.log("[v0] Modal: Update successful, invoking onSuccess callback");
         toast.success(`${editMode === "debt" ? "Total debt" : "Remaining balance"} updated successfully`)
+        // Call onSuccess first to refresh data, then close
+        if (onSuccess) {
+          console.log("[v0] Modal: Calling onSuccess callback");
+          onSuccess()
+        } else {
+          console.warn("[v0] Modal: onSuccess callback not provided");
+        }
+        setTimeout(() => {
+          console.log("[v0] Modal: Closing modal after refresh");
+          onClose()
+        }, 100)
       } else {
-        console.log("[v0] Update failed:", responseData.error)
         toast.error(responseData.error || `Failed to update ${editMode}`)
       }
     } catch (error) {
-      console.error("[v0] Failed to update:", error)
       toast.error(`Error updating ${editMode}`)
     } finally {
       setLoading(false)

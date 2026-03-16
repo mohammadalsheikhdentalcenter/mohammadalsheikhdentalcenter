@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { AppointmentReferral, connectDB, Appointment } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -17,7 +17,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Only doctors can update referrals" }, { status: 403 })
     }
 
-    const { id } = params
+    const { id } = await params
     const { action, notes } = await request.json()
 
     if (!action) {

@@ -80,19 +80,49 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     history.updatedAt = new Date()
     await history.save()
 
-    const updatedHistory = history.toObject()
-    if (updatedHistory.entries && Array.isArray(updatedHistory.entries)) {
-      for (const e of updatedHistory.entries) {
-        if (e.createdById) {
-          e.createdById = String(e.createdById)
-        }
-        if (e.doctorId) {
-          e.doctorId = String(e.doctorId)
-        }
-      }
+    // Fetch fresh history with proper entry formatting
+    const freshHistory = await MedicalHistory.findById(id).lean()
+    
+    let processedEntries = []
+    if (freshHistory && freshHistory.entries?.length > 0) {
+      processedEntries = await Promise.all(
+        freshHistory.entries.map(async (e: any) => {
+          let doctorName = e.doctorName || "Unknown"
+          let createdByName = e.createdByName || "Unknown"
+          const createdById = e.createdById ? String(e.createdById) : (e.doctorId ? String(e.doctorId) : null)
+
+          if (e.doctorId && !e.doctorName) {
+            const doc = await User.findById(e.doctorId).select("name specialty")
+            doctorName = doc?.name || "Unknown"
+          }
+
+          if (createdById && !e.createdByName) {
+            const creator = await User.findById(createdById).select("name specialty")
+            createdByName = creator?.name || "Unknown"
+          }
+
+          return {
+            ...e,
+            _id: e._id ? String(e._id) : undefined,
+            createdById,
+            doctorName,
+            createdByName,
+          }
+        }),
+      )
     }
 
-    return NextResponse.json({ success: true, history: updatedHistory })
+    return NextResponse.json({ 
+      success: true, 
+      history: {
+        _id: freshHistory?._id ? String(freshHistory._id) : null,
+        patientId: freshHistory?.patientId,
+        entries: processedEntries,
+        doctorId: null,
+        createdAt: freshHistory?.createdAt,
+        updatedAt: freshHistory?.updatedAt,
+      }
+    })
   } catch (error) {
     console.error("[v0] PUT medical history error:", error)
     return NextResponse.json({ error: "Failed to update medical history: " + String(error) }, { status: 500 })
@@ -177,19 +207,49 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     history.updatedAt = new Date()
     await history.save()
 
-    const updatedHistory = history.toObject()
-    if (updatedHistory.entries && Array.isArray(updatedHistory.entries)) {
-      for (const e of updatedHistory.entries) {
-        if (e.createdById) {
-          e.createdById = String(e.createdById)
-        }
-        if (e.doctorId) {
-          e.doctorId = String(e.doctorId)
-        }
-      }
+    // Fetch fresh history with proper entry formatting
+    const freshHistory = await MedicalHistory.findById(id).lean()
+    
+    let processedEntries = []
+    if (freshHistory && freshHistory.entries?.length > 0) {
+      processedEntries = await Promise.all(
+        freshHistory.entries.map(async (e: any) => {
+          let doctorName = e.doctorName || "Unknown"
+          let createdByName = e.createdByName || "Unknown"
+          const createdById = e.createdById ? String(e.createdById) : (e.doctorId ? String(e.doctorId) : null)
+
+          if (e.doctorId && !e.doctorName) {
+            const doc = await User.findById(e.doctorId).select("name specialty")
+            doctorName = doc?.name || "Unknown"
+          }
+
+          if (createdById && !e.createdByName) {
+            const creator = await User.findById(createdById).select("name specialty")
+            createdByName = creator?.name || "Unknown"
+          }
+
+          return {
+            ...e,
+            _id: e._id ? String(e._id) : undefined,
+            createdById,
+            doctorName,
+            createdByName,
+          }
+        }),
+      )
     }
 
-    return NextResponse.json({ success: true, history: updatedHistory })
+    return NextResponse.json({ 
+      success: true, 
+      history: {
+        _id: freshHistory?._id ? String(freshHistory._id) : null,
+        patientId: freshHistory?.patientId,
+        entries: processedEntries,
+        doctorId: null,
+        createdAt: freshHistory?.createdAt,
+        updatedAt: freshHistory?.updatedAt,
+      }
+    })
   } catch (error) {
     console.error("[v0] DELETE medical history error:", error)
     return NextResponse.json({ error: "Failed to delete medical history entry: " + String(error) }, { status: 500 })

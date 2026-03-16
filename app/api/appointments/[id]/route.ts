@@ -12,11 +12,12 @@ import { sendAppointmentCancellationEmail } from "@/lib/nodemailer-service"
 import { sendAppointmentRescheduleEmail } from "@/lib/nodemailer-service"
 import { formatTimeFor12Hour } from "@/lib/utils"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log("🟢 [GET] Fetching appointment details")
     await connectDB()
 
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) {
       console.warn("🔴 [GET] No token found in request")
@@ -29,7 +30,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    const { id } = params
     console.log("🟠 [GET] Fetching appointment with ID:", id)
 
     const appointment = await Appointment.findById(id)
@@ -64,12 +64,13 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log("🟢 [PUT] Appointment update called")
     await connectDB()
     console.log("🟢 [PUT] Database connected successfully")
 
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) {
       console.warn("🔴 [PUT] No token found in request")
@@ -81,8 +82,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       console.warn("🔴 [PUT] Invalid token received")
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
-
-    const { id } = params
     const updateData = await request.json()
     console.log("🟠 [PUT] Update data received:", updateData)
 
@@ -341,12 +340,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     console.log("🟢 [DELETE] Appointment deletion called")
     await connectDB()
     console.log("🟢 [DELETE] Database connected successfully")
 
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -365,8 +365,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       console.warn("🔴 [DELETE] Unauthorized role tried to delete appointment:", payload.role)
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
-
-    const { id } = params
     console.log("🟠 [DELETE] Deleting appointment with ID:", id)
 
     const deletedAppointment = await Appointment.findByIdAndDelete(id)

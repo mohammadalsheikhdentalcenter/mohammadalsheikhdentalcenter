@@ -185,6 +185,18 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
 
     try {
       if (editingId && history && history._id) {
+        // Find the entry index
+        const entryIndex = history.entries.findIndex((e: MedicalEntry) => e._id === editingId)
+        if (entryIndex === -1) {
+          toast({
+            title: "Error",
+            description: "Entry not found",
+            variant: "destructive",
+          })
+          setSaving(false)
+          return
+        }
+
         const res = await fetch(`/api/medical-history/${history._id}`, {
           method: "PUT",
           headers: {
@@ -192,7 +204,7 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            entryId: editingId,
+            entryIndex,
             entry: {
               notes: formData.notes,
               findings: formData.findings,
@@ -201,8 +213,6 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
                 .split(",")
                 .map((m) => m.trim())
                 .filter((m) => m),
-              date: new Date().toISOString(),
-              doctorName: currentDoctorId && doctors[currentDoctorId]?.name
             },
           }),
         })
@@ -240,8 +250,6 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
                 .split(",")
                 .map((m) => m.trim())
                 .filter((m) => m),
-              date: new Date().toISOString(),
-              doctorName: currentDoctorId && doctors[currentDoctorId]?.name
             },
           }),
         })
@@ -253,6 +261,8 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
             title: "Success",
             description: "Medical history entry added",
           })
+          // Refresh after adding to ensure fresh data
+          await fetchMedicalHistory()
         } else {
           const error = await res.json()
           toast({
@@ -262,7 +272,6 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
           })
         }
       }
-
       setShowForm(false)
       setFormData({ notes: "", findings: "", treatment: "", medications: "" })
       setErrors({})
@@ -338,13 +347,27 @@ export function MedicalHistorySection({ patientId, token, isDoctor, currentDocto
     setDeleting(true)
 
     try {
+      // Find the entry index
+      const entryIndex = history.entries.findIndex((e: MedicalEntry) => e._id === entryToDelete)
+      if (entryIndex === -1) {
+        toast({
+          title: "Error",
+          description: "Entry not found",
+          variant: "destructive",
+        })
+        setDeleting(false)
+        setDeleteModalOpen(false)
+        setEntryToDelete(null)
+        return
+      }
+
       const res = await fetch(`/api/medical-history/${history._id}`, {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ entryId: entryToDelete }),
+        body: JSON.stringify({ entryIndex }),
       })
 
       if (res.ok) {

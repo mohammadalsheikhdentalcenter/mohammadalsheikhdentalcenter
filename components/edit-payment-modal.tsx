@@ -22,7 +22,6 @@ export function EditPaymentModal({ patientId, transaction, billingId, isOpen, on
 
   useEffect(() => {
     if (isOpen && transaction) {
-      console.log("[v0] Loading transaction data:", transaction)
       const cash = transaction?.paymentSplits?.find((p: any) => p.paymentType === "cash")?.amount || 0
       const card = transaction?.paymentSplits?.find((p: any) => p.paymentType === "card")?.amount || 0
       const bankTransfer = transaction?.paymentSplits?.find((p: any) => p.paymentType === "bankTransfer")?.amount || 0
@@ -78,9 +77,17 @@ export function EditPaymentModal({ patientId, transaction, billingId, isOpen, on
       })
 
       if (res.ok) {
-        onClose()
-        onSuccess()
         toast.success("Payment updated successfully")
+        
+        // Call onSuccess to refresh data first
+        if (onSuccess) {
+          onSuccess()
+        }
+        
+        // Close modal after refresh completes
+        setTimeout(() => {
+          onClose()
+        }, 100)
       } else {
         const data = await res.json()
         toast.error(data.error || "Failed to update payment")
@@ -168,7 +175,7 @@ export function EditPaymentModal({ patientId, transaction, billingId, isOpen, on
             <button
               type="submit"
               disabled={loading || totalPayment <= 0}
-              className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-accent-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 flex items-center justify-center gap-2 bg-accent hover:bg-accent/90 disabled:bg-accent/50 text-accent-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Update Payment
@@ -177,7 +184,7 @@ export function EditPaymentModal({ patientId, transaction, billingId, isOpen, on
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer"
             >
               Cancel
             </button>

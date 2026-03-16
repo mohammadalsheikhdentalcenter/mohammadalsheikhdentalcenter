@@ -2812,7 +2812,7 @@ export default function PatientDetailPage() {
         {/* View Report Modal - WITH COMPLETE APPOINTMENT DETAILS */}
         {showViewReportModal && selectedReport && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-2 sm:p-4 z-50 animate-in fade-in duration-200">
-            <div className="bg-card rounded-xl shadow-2xl border border-border w-full max-w-4xl max-h-[95vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+            <div className="bg-card rounded-xl shadow-2xl border border-border w-full max-w-3xl max-h-[95vh] overflow-y-auto animate-in zoom-in-95 duration-200">
               {/* Modal Header */}
               <div className="flex justify-between items-start p-6 sm:p-8 border-b border-border sticky top-0 bg-gradient-to-r from-card to-muted/30">
                 <div className="min-w-0 pr-4">

@@ -3,7 +3,7 @@ import { Inventory, connectDB } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 import { Types } from "mongoose"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    const { id } = params
+    const { id } = await params
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
@@ -29,9 +29,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -39,8 +40,6 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (!payload || (payload.role !== "admin" && payload.role !== "hr")) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
-
-    const { id } = params
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }
@@ -83,9 +82,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -93,8 +93,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (!payload || (payload.role !== "admin" && payload.role !== "hr")) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
-
-    const { id } = params
     if (!Types.ObjectId.isValid(id)) {
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 })
     }

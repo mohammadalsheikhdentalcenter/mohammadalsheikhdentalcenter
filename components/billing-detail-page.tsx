@@ -47,7 +47,9 @@ export function BillingDetailPage({ patient, onBack }: any) {
   }, [token, patient?.patientId]);
 
   const fetchTransactions = async () => {
-    if (!patient?.patientId) return;
+    if (!patient?.patientId) {
+      return;
+    }
 
     setLoading(true);
     try {
@@ -67,6 +69,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
         toast.error("Failed to load billing data");
       }
     } catch (error) {
+      console.error("Error loading billing data:", error);
       toast.error("Failed to load billing data");
     } finally {
       setLoading(false);
@@ -83,7 +86,6 @@ export function BillingDetailPage({ patient, onBack }: any) {
 
   const handlePaymentAdded = () => {
     setShowAddPayment(false);
-    // toast.success("Payment recorded successfully")
     setTimeout(() => {
       fetchTransactions();
     }, 300);
@@ -446,7 +448,7 @@ export function BillingDetailPage({ patient, onBack }: any) {
 
             {/* Payment History */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-x-auto">
-              <PaymentHistory billings={billings} patient={patient} />
+              <PaymentHistory billings={billings} patient={patient} onPaymentUpdated={fetchTransactions} />
             </div>
           </>
         )}

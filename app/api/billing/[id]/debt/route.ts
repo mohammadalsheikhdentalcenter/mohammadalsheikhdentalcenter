@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectDB, Billing } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     if (payload.role === "doctor") return NextResponse.json({ error: "Access denied" }, { status: 403 })
 
-    const { id: patientId } = params
+    const { id: patientId } = await params
     const { amount, description, date } = await request.json()
 
     if (!amount || amount <= 0) {
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
  * PUT: Update the total debt and/or remaining balance for a billing record
  * This allows staff to adjust both the debt amount and outstanding balance when discounts or adjustments apply
  */
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -61,15 +61,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     if (payload.role === "doctor") return NextResponse.json({ error: "Access denied" }, { status: 403 })
 
-    const { id: billingId } = params
+    const { id: billingId } = await params
     const { totalDebt, remainingBalance, adjustmentReason } = await request.json()
-
-    console.log("[Debt PUT] Request received:", { billingId, totalDebt, remainingBalance, adjustmentReason })
 
     // Get the billing record
     const billing = await Billing.findById(billingId)
     if (!billing) {
-      console.log("[Debt PUT] Billing not found:", billingId)
       return NextResponse.json({ error: "Billing record not found" }, { status: 404 })
     }
 

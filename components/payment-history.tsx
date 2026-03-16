@@ -9,7 +9,7 @@ import jsPDF from "jspdf"
 import { EditPaymentModal } from "@/components/edit-payment-modal"
 
 // PaymentHistory Component with Beautiful PDF Generation
-export function PaymentHistory({ billings, patient }: any) {
+export function PaymentHistory({ billings, patient, onPaymentUpdated }: any) {
   const allTransactions = billings.flatMap((billing: any) => {
     // Include transactions from the transactions array
     const transactionsFromArray = (billing.transactions || []).map((transaction: any) => ({
@@ -562,7 +562,13 @@ export function PaymentHistory({ billings, patient }: any) {
 
   const handlePaymentUpdated = () => {
     setShowEditPayment(false)
-    // fetchTransactions() // Refresh the list
+    setSelectedTransaction(null)
+    setSelectedBillingId(null)
+    setTimeout(() => {
+      if (onPaymentUpdated) {
+        onPaymentUpdated()
+      }
+    }, 300)
   }
 
   const formatCurrency = (amount: number) => {

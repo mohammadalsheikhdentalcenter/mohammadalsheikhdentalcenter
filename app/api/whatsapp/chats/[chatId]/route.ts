@@ -7,7 +7,7 @@ import { verifyToken } from "@/lib/auth"
 
 
 // GET /api/whatsapp/chats/[chatId] - Get specific chat with all details
-export async function GET(req: NextRequest, { params }: { params: { chatId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
   try {
     await connectDB()
         const token = req.headers.get("authorization")?.split(" ")[1]
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: { chatId: stri
           return NextResponse.json({ error: "Access denied" }, { status: 403 })
         }
 
-    const { chatId } = params
+    const { chatId } = await params
 
     const chat = await WhatsAppChat.findById(chatId).populate("patientId", "name phones email")
 
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest, { params }: { params: { chatId: stri
 }
 
 // PATCH /api/whatsapp/chats/[chatId] - Update chat status
-export async function PATCH(req: NextRequest, { params }: { params: { chatId: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ chatId: string }> }) {
   try {
      await connectDB()
         const token = req.headers.get("authorization")?.split(" ")[1]
@@ -83,7 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { chatId: st
 
     await connectDB()
 
-    const { chatId } = params
+    const { chatId } = await params
     const { status } = await req.json()
 
     if (!status || !["active", "archived", "closed"].includes(status)) {

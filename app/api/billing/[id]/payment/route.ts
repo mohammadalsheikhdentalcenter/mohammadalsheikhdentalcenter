@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectDB, Billing } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     if (payload.role === "doctor") return NextResponse.json({ error: "Access denied" }, { status: 403 })
 
-    const { id: patientId } = params
+    const { id: patientId } = await params
     const { paymentMethods, totalAmount, description, date } = await request.json()
 
     if (!totalAmount || totalAmount <= 0) {

@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectDB, Billing } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -11,11 +11,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const payload = verifyToken(token)
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
 
-    const patientId = params.id
-    console.log("[v0] Fetching transactions for patientId:", patientId)
+    const { id: patientId } = await params
 
     const billings = await Billing.find({ patientId }).sort({ createdAt: -1 })
-    console.log("[v0] Found billings count:", billings.length)
 
     // Calculate totals
     const totalPaid = billings.reduce((sum: number, b: any) => sum + (b.paidAmount || 0), 0)
@@ -30,13 +28,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // Calculate payment percentage
     const paymentPercentage = totalDebt > 0 ? 
     Math.min(100, (totalPaid2 / totalDebt) * 100) : 0
-    
-    console.log("[v0] Calculated stats:", { 
-      totalPaid, 
-      totalDebt, 
-      remainingBalance, 
-      paymentPercentage 
-    })
 
     return NextResponse.json({
       success: true,

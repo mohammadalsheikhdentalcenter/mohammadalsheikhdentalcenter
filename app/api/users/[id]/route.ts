@@ -3,10 +3,11 @@ import { NextResponse } from "next/server";
 import { User, connectDB } from "@/lib/db-server";
 import { verifyToken } from "@/lib/auth";
 
-export async function DELETE(request, { params }) {
+export async function DELETE(request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB();
 
+    const { id } = await params;
     const token = request.headers.get("authorization")?.split(" ")[1];
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -16,8 +17,6 @@ export async function DELETE(request, { params }) {
     if (!payload) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
-
-    const { id } = params;
 
     const deletedUser = await User.findByIdAndDelete(id);
 

@@ -36,15 +36,31 @@ export function AddDebtModal({ patientId, isOpen, onClose, onSuccess }: any) {
       })
 
       if (res.ok) {
-        onClose()
-        onSuccess()
+        console.log("[v0] Add Debt: Update successful, invoking onSuccess callback")
         toast.success("Debt added successfully")
+        
+        // Reset form first
         setFormData({ amount: "", description: "", date: new Date().toISOString().split("T")[0] })
+        
+        // Call onSuccess to refresh data
+        if (onSuccess) {
+          console.log("[v0] Add Debt: Calling onSuccess callback")
+          onSuccess()
+        } else {
+          console.warn("[v0] Add Debt: onSuccess callback not provided")
+        }
+        
+        // Close modal after refresh
+        setTimeout(() => {
+          console.log("[v0] Add Debt: Closing modal after refresh")
+          onClose()
+        }, 100)
       } else {
+        console.log("[v0] Add Debt: Failed to add debt")
         toast.error("Failed to add debt")
       }
     } catch (error) {
-      console.error("Failed to add debt:", error)
+      console.error("[v0] Add Debt: Failed to add debt:", error)
       toast.error("Error adding debt")
     } finally {
       setLoading(false)
@@ -102,7 +118,7 @@ export function AddDebtModal({ patientId, isOpen, onClose, onSuccess }: any) {
             <button
               type="submit"
               disabled={loading || !formData.amount}
-              className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-primary/50 text-primary-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Add Debt
@@ -111,7 +127,7 @@ export function AddDebtModal({ patientId, isOpen, onClose, onSuccess }: any) {
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm"
+              className="flex-1 bg-muted hover:bg-muted/80 text-muted-foreground px-4 py-2 rounded-lg transition-colors font-medium text-sm cursor-pointer"
             >
               Cancel
             </button>

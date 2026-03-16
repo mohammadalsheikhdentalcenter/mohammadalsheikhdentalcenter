@@ -237,16 +237,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const payload = verifyToken(token)
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-
-    const { id } = params
     const updateData = await request.json()
 
     // Check if patient exists
@@ -454,9 +453,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
+    const { id } = await params
     const token = request.headers.get("authorization")?.split(" ")[1]
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
@@ -464,8 +464,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     if (payload.role === "doctor")
       return NextResponse.json({ error: "Doctors cannot delete patients" }, { status: 403 })
-
-    const { id } = params
 
     const deletedPatient = await Patient.findByIdAndDelete(id)
     if (!deletedPatient) {

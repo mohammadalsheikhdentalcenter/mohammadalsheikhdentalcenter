@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { PatientImage, connectDB, Patient } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const { id } = await params

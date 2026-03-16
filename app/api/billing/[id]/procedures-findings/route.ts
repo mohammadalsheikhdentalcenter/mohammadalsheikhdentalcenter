@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectDB, AppointmentReport } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     if (payload.role === "doctor") return NextResponse.json({ error: "Access denied" }, { status: 403 })
 
-    const patientId = params.id
+    const { id: patientId } = await params
     const { appointmentId } = request.nextUrl.searchParams
 
     const query: any = { patientId }

@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { ToothChart, connectDB } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const payload = verifyToken(token)
     if (!payload) return NextResponse.json({ error: "Invalid token" }, { status: 401 })
 
-    const chart = await ToothChart.findById(params.id)
+    const { id } = await params
+    const chart = await ToothChart.findById(id)
     if (!chart) return NextResponse.json({ error: "Tooth chart not found" }, { status: 404 })
 
     // Enrich chart data with patient and doctor names

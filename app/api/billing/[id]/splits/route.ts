@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { connectDB, Billing } from "@/lib/db-server"
 import { verifyToken } from "@/lib/auth"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -24,7 +24,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     }
 
-    const billing = await Billing.findById(params.id)
+    const { id } = await params
+    const billing = await Billing.findById(id)
     if (!billing) return NextResponse.json({ error: "Billing not found" }, { status: 404 })
 
     billing.paymentSplits = splits.map((split: any) => ({
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await connectDB()
     const token = request.headers.get("authorization")?.split(" ")[1]
@@ -64,7 +65,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const { splitId } = await request.json()
     if (!splitId) return NextResponse.json({ error: "Split ID required" }, { status: 400 })
 
-    const billing = await Billing.findById(params.id)
+    const { id } = await params
+    const billing = await Billing.findById(id)
     if (!billing) return NextResponse.json({ error: "Billing not found" }, { status: 404 })
 
     billing.paymentSplits = billing.paymentSplits?.filter((split: any) => split._id?.toString() !== splitId) || []
