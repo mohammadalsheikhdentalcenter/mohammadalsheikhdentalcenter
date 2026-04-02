@@ -36,6 +36,7 @@ interface ToothChartProps {
   generalProcedures?: GeneralProcedure[];
   toothChart?: any;
   patientId?: string;
+  patientDob?: string;
   token?: string;
   onGeneralProcedureAdd?: (procedure: GeneralProcedure) => void;
   onGeneralProcedureRemove?: (procedureId: string) => void;
@@ -66,6 +67,7 @@ export function ToothChartVisual({
   generalProcedures = [],
   toothChart,
   patientId,
+  patientDob,
   token,
   onGeneralProcedureAdd,
   onGeneralProcedureRemove,
@@ -82,6 +84,24 @@ export function ToothChartVisual({
   >(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Calculate patient age from DOB to determine if baby teeth should be shown
+  const patientAge = (() => {
+    if (!patientDob) return null;
+    try {
+      const birth = new Date(patientDob);
+      const today = new Date();
+      let age = today.getFullYear() - birth.getFullYear();
+      const m = today.getMonth() - birth.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+      return age;
+    } catch {
+      return null;
+    }
+  })();
+
+  // Show baby teeth only when age is 14 or under (or DOB unknown)
+  const showBabyTeeth = patientAge === null || patientAge <= 14;
 
   // Check if mobile on mount and window resize
   useEffect(() => {
@@ -402,6 +422,140 @@ export function ToothChartVisual({
     48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38,
   ];
 
+  // Baby/primary teeth: A-E upper right, F-J upper left, K-O lower left, P-T lower right
+  // child1-5 = A-E (upper right), child6-10 = F-J (upper left)
+  // child11-15 = K-O (lower left), child16-20 = P-T (lower right)
+  const BABY_TOOTH_LABELS: Record<number, string> = {
+    51: "A", 52: "B", 53: "C", 54: "D", 55: "E",
+    61: "F", 62: "G", 63: "H", 64: "I", 65: "J",
+    71: "K", 72: "L", 73: "M", 74: "N", 75: "O",
+    81: "P", 82: "Q", 83: "R", 84: "S", 85: "T",
+  };
+  const BABY_TOOTH_IMAGE: Record<number, number> = {
+    51: 1, 52: 2, 53: 3, 54: 4, 55: 5,
+    61: 6, 62: 7, 63: 8, 64: 9, 65: 10,
+    71: 11, 72: 12, 73: 13, 74: 14, 75: 15,
+    81: 16, 82: 17, 83: 18, 84: 19, 85: 20,
+  };
+  const upperBabyTeeth = [55, 54, 53, 52, 51, 61, 62, 63, 64, 65];
+  const lowerBabyTeeth = [85, 84, 83, 82, 81, 71, 72, 73, 74, 75];
+
+  const getBabyToothName = (toothNumber: number): string => {
+    const label = BABY_TOOTH_LABELS[toothNumber];
+    const names: Record<string, string> = {
+      A: "Upper Right 2nd Molar", B: "Upper Right 1st Molar", C: "Upper Right Canine",
+      D: "Upper Right Lateral Incisor", E: "Upper Right Central Incisor",
+      F: "Upper Left Central Incisor", G: "Upper Left Lateral Incisor", H: "Upper Left Canine",
+      I: "Upper Left 1st Molar", J: "Upper Left 2nd Molar",
+      K: "Lower Left 2nd Molar", L: "Lower Left 1st Molar", M: "Lower Left Canine",
+      N: "Lower Left Lateral Incisor", O: "Lower Left Central Incisor",
+      P: "Lower Right Central Incisor", Q: "Lower Right Lateral Incisor", R: "Lower Right Canine",
+      S: "Lower Right 1st Molar", T: "Lower Right 2nd Molar",
+    };
+    return label ? `${names[label] || `Baby Tooth ${label}`} (${label})` : `Baby Tooth ${toothNumber}`;
+  };
+
+  const BabyToothImage = ({ toothNumber, status }: { toothNumber: number; status: string }) => {
+    const [imageError, setImageError] = useState(false);
+    const imgNum = BABY_TOOTH_IMAGE[toothNumber];
+    return (
+      <div className="relative w-full h-full flex items-center justify-center bg-white rounded-lg overflow-hidden">
+        {status === "missing" ? (
+          <div className="w-full h-full flex items-center justify-center border-2 border-dashed border-gray-400 bg-gray-100">
+            <div className="text-gray-600 text-sm font-bold">✕</div>
+          </div>
+        ) : imageError ? (
+          <div className="w-full h-full flex items-center justify-center bg-amber-50">
+            <div className="text-amber-700 text-xs font-bold">{BABY_TOOTH_LABELS[toothNumber]}</div>
+          </div>
+        ) : (
+          <img
+            src={`/teeth/child${imgNum}.png`}
+            alt={`Baby Tooth ${BABY_TOOTH_LABELS[toothNumber]}`}
+            className="w-full h-full object-contain p-0.5"
+            onError={() => setImageError(true)}
+            loading="lazy"
+            crossOrigin="anonymous"
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderBabyToothBox = (toothNum: number, isUpper: boolean) => {
+    const toothStatus = teeth[toothNum]?.status || "healthy";
+    const label = BABY_TOOTH_LABELS[toothNum];
+    const toothName = getBabyToothName(toothNum);
+    const isTreated = toothStatus !== "healthy" && toothStatus !== "missing";
+    const isMissing = toothStatus === "missing";
+    const showTooltipForThisTooth = showTooltip === toothNum;
+
+    const getBabyToothSize = () => {
+      if (isMobile) return "h-12 w-8";
+      return "h-16 w-9 sm:h-18 sm:w-11 md:h-20 md:w-12";
+    };
+
+    return (
+      <div key={toothNum} className="relative flex flex-col items-center flex-shrink-0 overflow-visible">
+        <div className="relative z-40">
+          <button
+            onClick={() => {
+              setSelectedTooth(toothNum);
+              onToothClick(toothNum);
+              if (isMobile) {
+                setShowTooltip(toothNum);
+                setTimeout(() => setShowTooltip(null), 2000);
+              }
+            }}
+            onTouchStart={(e) => handleToothTouch(toothNum, e)}
+            onTouchEnd={(e) => e.preventDefault()}
+            disabled={readOnly}
+            className={`relative ${getBabyToothSize()} rounded flex flex-col items-center justify-center transition-all overflow-visible border-2 bg-amber-50 group
+              ${readOnly ? "cursor-default" : isMobile ? "active:scale-95" : "hover:shadow-lg cursor-pointer hover:scale-105"}
+              ${selectedTooth === toothNum ? "ring-2 ring-offset-1 ring-amber-500 border-amber-500" : "border-amber-300"}
+              ${isMobile ? "touch-manipulation" : ""}
+            `}
+            style={{
+              borderColor: selectedTooth === toothNum ? "#f59e0b" : isTreated ? "#3b82f6" : "#fcd34d",
+              WebkitTapHighlightColor: "transparent",
+            }}
+          >
+            {/* Label */}
+            <div className={`absolute ${isUpper ? "bottom-0.5" : "top-0.5"} left-1/2 transform -translate-x-1/2 z-10 ${!isMobile ? "group-hover:opacity-0" : ""} transition-opacity`}>
+              <span className="font-bold text-[7px] sm:text-[8px] text-amber-800 bg-amber-50/90 px-0.5 rounded shadow-sm">{label}</span>
+            </div>
+            <div className="w-full h-full p-0.5">
+              <BabyToothImage toothNumber={toothNum} status={toothStatus} />
+            </div>
+            {/* Mobile Tooltip */}
+            {isMobile && showTooltipForThisTooth && (
+              <div className="absolute -top-20 left-1/2 transform -translate-x-1/2 bg-white border border-amber-200 rounded-md shadow-lg px-2 py-1.5 text-center z-[100] min-w-[140px] max-w-[180px]">
+                <div className="font-semibold text-[10px] text-gray-800 mb-0.5 whitespace-nowrap">{toothName}</div>
+                <div className="text-[10px]">
+                  {isMissing ? <span className="font-medium text-amber-600">Missing</span>
+                    : isTreated ? <span className="font-medium text-indigo-600">Procedure Done</span>
+                    : <span className="font-medium text-green-600">Healthy</span>}
+                </div>
+                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-white border-r border-b border-amber-200 rotate-45"></div>
+              </div>
+            )}
+            {/* Desktop Tooltip */}
+            {!isMobile && (
+              <div className="hidden lg:block absolute -top-14 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white border border-amber-300 rounded-md shadow-lg px-2 py-1.5 text-center z-50 min-w-[140px] max-w-[180px] pointer-events-none">
+                <div className="font-semibold text-[10px] text-gray-800">{toothName}</div>
+                <div className="text-[10px] text-gray-600">
+                  {isMissing ? <div className="font-medium text-amber-600">Status: Missing</div>
+                    : isTreated ? <div className="font-medium text-indigo-600">Status: Procedure Done</div>
+                    : <div className="font-medium text-green-600">Status: Healthy</div>}
+                </div>
+              </div>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // Responsive styles
   const getToothGap = () => {
     if (isMobile) {
@@ -494,7 +648,7 @@ export function ToothChartVisual({
               className={`${isMobile ? "inline-block min-w-full" : "w-full"}`}
             >
               <div className="space-y-0">
-                {/* Upper Teeth Row */}
+                {/* Upper Adult Teeth Row */}
                 <div
                   className={`flex items-center ${isMobile ? "justify-start" : "justify-center"}`}
                 >
@@ -516,10 +670,36 @@ export function ToothChartVisual({
                   </div>
                 </div>
 
+                {/* Upper Baby Teeth Row - only for age <= 14 */}
+                {showBabyTeeth && (
+                  <div className={`flex items-center ${isMobile ? "justify-start" : "justify-center"} mt-0.5`}>
+                    <div className={`flex ${getToothGap()}`}>
+                      {upperBabyTeeth.slice(0, 5).map((toothNum) => renderBabyToothBox(toothNum, true))}
+                    </div>
+                    <div className="w-0.5 bg-amber-400 mx-0.5 sm:mx-1 flex-shrink-0" style={{ height: isMobile ? "48px" : "72px" }} />
+                    <div className={`flex ${getToothGap()}`}>
+                      {upperBabyTeeth.slice(5).map((toothNum) => renderBabyToothBox(toothNum, true))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Horizontal line between upper and lower */}
                 <div className="h-0.5 bg-red-500 my-0.5 sm:my-1" />
 
-                {/* Lower Teeth Row */}
+                {/* Lower Baby Teeth Row - only for age <= 14 */}
+                {showBabyTeeth && (
+                  <div className={`flex items-center ${isMobile ? "justify-start" : "justify-center"} mb-0.5`}>
+                    <div className={`flex ${getToothGap()}`}>
+                      {lowerBabyTeeth.slice(0, 5).map((toothNum) => renderBabyToothBox(toothNum, false))}
+                    </div>
+                    <div className="w-0.5 bg-amber-400 mx-0.5 sm:mx-1 flex-shrink-0" style={{ height: isMobile ? "48px" : "72px" }} />
+                    <div className={`flex ${getToothGap()}`}>
+                      {lowerBabyTeeth.slice(5).map((toothNum) => renderBabyToothBox(toothNum, false))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Lower Adult Teeth Row */}
                 <div
                   className={`flex items-center ${isMobile ? "justify-start" : "justify-center"}`}
                 >
@@ -564,6 +744,12 @@ export function ToothChartVisual({
             <div className="w-3 h-3 bg-[#d1d5db] rounded-full"></div>
             <span>Healthy</span>
           </div>
+          {showBabyTeeth && (
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 bg-amber-200 rounded-full border border-amber-400"></div>
+              <span>Baby Teeth</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -578,6 +764,12 @@ export function ToothChartVisual({
             <div className="w-3 h-3 bg-[#d1d5db] rounded-full"></div>
             <span>Healthy</span>
           </div>
+          {showBabyTeeth && (
+            <div className="flex items-center gap-1">
+              <div className="w-3 h-3 bg-amber-200 rounded-full border border-amber-400"></div>
+              <span>Baby Teeth (A–T)</span>
+            </div>
+          )}
         </div>
       )}
 

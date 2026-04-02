@@ -77,6 +77,22 @@ const formatDate = (dateString: string | Date): string => {
   }
 };
 
+// Baby tooth number → letter label (A–T)
+const BABY_TOOTH_LABELS: Record<number, string> = {
+  51: "A", 52: "B", 53: "C", 54: "D", 55: "E",
+  61: "F", 62: "G", 63: "H", 64: "I", 65: "J",
+  71: "K", 72: "L", 73: "M", 74: "N", 75: "O",
+  81: "P", 82: "Q", 83: "R", 84: "S", 85: "T",
+};
+
+const formatToothLabel = (toothNum: number): string => {
+  const label = BABY_TOOTH_LABELS[toothNum];
+  return label ? label : `#${toothNum}`;
+};
+
+const isBabyTooth = (toothNum: number): boolean =>
+  toothNum >= 51 && toothNum <= 85;
+
 export function ToothChartResultsTable({
   teeth,
   procedures = [],
@@ -457,9 +473,9 @@ export function ToothChartResultsTable({
                             .map((toothNum, idx) => (
                               <span
                                 key={idx}
-                                className="inline-block bg-blue-100 text-blue-800 px-1 py-1 rounded text-xs font-semibold text-center whitespace-nowrap"
+                                className={`inline-block px-1 py-1 rounded text-xs font-semibold text-center whitespace-nowrap ${isBabyTooth(toothNum) ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}
                               >
-                                #{toothNum}
+                                {formatToothLabel(toothNum)}
                               </span>
                             ))}
                         </div>
@@ -603,9 +619,9 @@ export function ToothChartResultsTable({
                               .map((toothNum, idx) => (
                                 <span
                                   key={idx}
-                                  className="inline-block bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                  className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${isBabyTooth(toothNum) ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}
                                 >
-                                  #{toothNum}
+                                  {formatToothLabel(toothNum)}
                                 </span>
                               ))}
                           </div>
@@ -712,9 +728,9 @@ export function ToothChartResultsTable({
                           .map((toothNum, idx) => (
                             <span
                               key={idx}
-                              className="inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm font-bold"
+                              className={`inline-block px-2 py-1 rounded text-sm font-bold ${isBabyTooth(toothNum) ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}
                             >
-                              #{toothNum}
+                              {formatToothLabel(toothNum)}
                             </span>
                           ))}
                       </div>
@@ -861,9 +877,9 @@ export function ToothChartResultsTable({
                           .map((toothNum, idx) => (
                             <span
                               key={idx}
-                              className="inline-block bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded text-xs font-bold"
+                              className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${isBabyTooth(toothNum) ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-800"}`}
                             >
-                              #{toothNum}
+                              {formatToothLabel(toothNum)}
                             </span>
                           ))}
                       </div>

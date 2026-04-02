@@ -1456,6 +1456,7 @@ export default function PatientDetailPage() {
                             onToothClick={handleToothClick}
                             readOnly={false}
                             patientId={patientId}
+                            patientDob={selectedPatient?.dob}
                             token={token}
                             toothChart={toothChart}
                             generalProcedures={

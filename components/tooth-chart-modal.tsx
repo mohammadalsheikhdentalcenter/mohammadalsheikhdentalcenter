@@ -37,6 +37,36 @@ const COMMON_PROCEDURES = [
   "Veneers"
 ];
 
+// Baby/primary teeth procedures
+const BABY_TOOTH_PROCEDURES = [
+  "Extraction",
+  "Pulpotomy",
+  "Pulpectomy",
+  "LSTR",
+  "Fissure Sealant",
+  "Fluoride",
+  "Stainless Steel Crown",
+  "Nitrous Oxide Sedation",
+  "Zirconia Crown",
+  "Pulpotomy with MTA",
+  "Pulpotomy with Biodentine",
+  "Ketacfill",
+  "Composite",
+  "Space Maintainer",
+  "Grouper's Appliance",
+];
+
+// Baby tooth number to letter label
+const BABY_TOOTH_LABELS: Record<number, string> = {
+  51: "A", 52: "B", 53: "C", 54: "D", 55: "E",
+  61: "F", 62: "G", 63: "H", 64: "I", 65: "J",
+  71: "K", 72: "L", 73: "M", 74: "N", 75: "O",
+  81: "P", 82: "Q", 83: "R", 84: "S", 85: "T",
+};
+
+const isBabyTooth = (toothNumber: number | null) =>
+  toothNumber !== null && toothNumber >= 51 && toothNumber <= 85;
+
 interface ToothModalProps {
   isOpen: boolean;
   toothNumber: number | null;
@@ -88,6 +118,8 @@ const ALL_TEETH = [
   18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28, 48, 47, 46,
   45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38,
 ];
+
+const ALL_BABY_TEETH = [55, 54, 53, 52, 51, 61, 62, 63, 64, 65, 85, 84, 83, 82, 81, 71, 72, 73, 74, 75];
 
 export function ToothChartModal({
   isOpen,
@@ -305,7 +337,9 @@ export function ToothChartModal({
               ? `Teeth #${selectedTeeth.sort((a, b) => a - b).join(", #")} - Enter Procedure Details`
               : enableMultiSelect
                 ? `Multiple Teeth - Enter Procedure Details`
-                : `Tooth #${toothNumber} - Enter Procedure Details`}
+                : isBabyTooth(toothNumber)
+                  ? `Baby Tooth ${BABY_TOOTH_LABELS[toothNumber!]} (#${toothNumber}) - Enter Procedure Details`
+                  : `Tooth #${toothNumber} - Enter Procedure Details`}
           </DialogTitle>
         </DialogHeader>
 
@@ -338,17 +372,19 @@ export function ToothChartModal({
             <div className="space-y-2">
               <Label className="text-sm font-medium">Select Teeth</Label>
               <div className="grid grid-cols-8 gap-1 p-3 bg-gray-50 rounded-lg border border-gray-200 max-h-32 overflow-y-auto">
-                {ALL_TEETH.map((tooth) => (
+                {(isBabyTooth(toothNumber) ? ALL_BABY_TEETH : ALL_TEETH).map((tooth) => (
                   <button
                     key={tooth}
                     onClick={() => handleToothToggle(tooth)}
                     className={`py-1 px-1 text-xs font-medium cursor-pointer rounded border transition-colors ${
                       selectedTeeth.includes(tooth)
                         ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-white border-border hover:bg-gray-100"
+                        : isBabyTooth(tooth)
+                          ? "bg-amber-50 border-amber-300 hover:bg-amber-100"
+                          : "bg-white border-border hover:bg-gray-100"
                     }`}
                   >
-                    {tooth}
+                    {isBabyTooth(tooth) ? BABY_TOOTH_LABELS[tooth] : tooth}
                   </button>
                 ))}
               </div>
@@ -405,7 +441,7 @@ export function ToothChartModal({
               className="w-full px-3 py-2 bg-input border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-foreground text-sm"
             >
               <option value="">Select a procedure...</option>
-              {COMMON_PROCEDURES.map((proc) => (
+              {(isBabyTooth(toothNumber) ? BABY_TOOTH_PROCEDURES : COMMON_PROCEDURES).map((proc) => (
                 <option key={proc} value={proc}>
                   {proc}
                 </option>
