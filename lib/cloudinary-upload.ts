@@ -1,9 +1,9 @@
-const MAX_FILE_SIZE = 1024 * 1024 // 1MB in bytes
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB in bytes
 
 export async function uploadToCloudinary(file: File): Promise<string> {
   // Validate file size
   if (file.size > MAX_FILE_SIZE) {
-    throw new Error(`File size must be less than 1MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`)
+    throw new Error(`File size must be less than 10MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB`)
   }
 
   const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"]

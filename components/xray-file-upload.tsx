@@ -19,7 +19,7 @@ export function XrayFileUpload({ onUploadSuccess, isLoading = false }: XrayFileU
   const [uploadProgress, setUploadProgress] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const MAX_FILE_SIZE = 1024 * 1024 // 1MB
+  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -32,7 +32,7 @@ export function XrayFileUpload({ onUploadSuccess, isLoading = false }: XrayFileU
 
   const validateFile = (file: File): boolean => {
     if (file.size > MAX_FILE_SIZE) {
-      toast.error(`File size must be less than 1MB. Your file is ${formatFileSize(file.size)}`)
+      toast.error(`File size must be less than 10MB. Your file is ${formatFileSize(file.size)}`)
       return false
     }
 
@@ -146,7 +146,7 @@ export function XrayFileUpload({ onUploadSuccess, isLoading = false }: XrayFileU
               <Upload className="w-8 sm:w-10 h-8 sm:h-10 text-muted-foreground" />
               <div className="text-center px-2">
                 <p className="font-semibold text-foreground text-sm sm:text-base">Drag and drop your X-ray image</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">or click to browse (Max 1MB)</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">or click to browse (Max 10MB)</p>
               </div>
             </>
           )}

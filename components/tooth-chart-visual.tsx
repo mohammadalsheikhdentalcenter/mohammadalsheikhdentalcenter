@@ -85,23 +85,8 @@ export function ToothChartVisual({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Calculate patient age from DOB to determine if baby teeth should be shown
-  const patientAge = (() => {
-    if (!patientDob) return null;
-    try {
-      const birth = new Date(patientDob);
-      const today = new Date();
-      let age = today.getFullYear() - birth.getFullYear();
-      const m = today.getMonth() - birth.getMonth();
-      if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-      return age;
-    } catch {
-      return null;
-    }
-  })();
-
-  // Show baby teeth only when age is 14 or under (or DOB unknown)
-  const showBabyTeeth = patientAge === null || patientAge <= 14;
+  // Always show baby teeth regardless of age
+  const showBabyTeeth = true;
 
   // Check if mobile on mount and window resize
   useEffect(() => {
